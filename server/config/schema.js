@@ -369,5 +369,26 @@ export function initializeDatabase() {
       discount_rate REAL DEFAULT 0,
       status TEXT DEFAULT 'active' CHECK(status IN ('active','inactive'))
     );
+
+    CREATE TABLE IF NOT EXISTS notification_templates (
+      template_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_name TEXT NOT NULL,
+      channel TEXT DEFAULT 'SMS',
+      subject TEXT,
+      body TEXT NOT NULL,
+      is_active INTEGER DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      template_id INTEGER,
+      recipient_name TEXT,
+      recipient_phone TEXT,
+      channel TEXT DEFAULT 'SMS',
+      message TEXT,
+      status TEXT DEFAULT 'Sent' CHECK(status IN ('Sent','Delivered','Failed')),
+      created_by INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 }

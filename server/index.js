@@ -27,6 +27,7 @@ import inventoryRoutes from './routes/inventory.js';
 import employeeRoutes from './routes/employees.js';
 import dashboardRoutes from './routes/dashboard.js';
 import adminRoutes from './routes/admin.js';
+import notificationRoutes from './routes/notifications.js';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/patients', patientRoutes);
@@ -39,6 +40,7 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 const frontendDist = path.join(__dirname, '..', 'dist');
 app.use(express.static(frontendDist));

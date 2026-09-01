@@ -105,4 +105,20 @@ if (existingPackages.count === 0) {
   console.log('Packages seeded');
 }
 
+const existingTemplates = db.prepare('SELECT COUNT(*) as count FROM notification_templates').get();
+if (existingTemplates.count === 0) {
+  const insertTemplate = db.prepare('INSERT INTO notification_templates (event_name, channel, subject, body, is_active) VALUES (?, ?, ?, ?, ?)');
+  const templates = [
+    ['Appointment Confirmation', 'SMS', null, 'Dear {patient_name}, your appointment with {doctor_name} is confirmed for {date} at {time}. Token #{token}.', 1],
+    ['Appointment Reminder', 'SMS', null, 'Reminder: Your appointment with {doctor_name} is tomorrow at {time}. Please arrive 10 mins early.', 1],
+    ['Token Update', 'SMS', null, 'Dear {patient_name}, your token #{token} is now being served at {department}.', 1],
+    ['Report Ready', 'SMS', null, 'Dear {patient_name}, your diagnostic report is ready. Access it via secure link: {link}', 1],
+    ['Payment Due', 'SMS', null, 'Dear {patient_name}, you have an outstanding balance of BDT {amount}. Please clear at your earliest convenience.', 1],
+    ['Birthday Greeting', 'SMS', null, 'Happy Birthday, {patient_name}! Wishing you great health. Enjoy 10% off your next visit.', 0],
+    ['Promotional Campaign', 'SMS', null, 'Dear {patient_name}, enjoy our special health checkup packages this month.', 0],
+  ];
+  templates.forEach(t => insertTemplate.run(...t));
+  console.log('Notification templates seeded');
+}
+
 console.log('Database initialization complete!');

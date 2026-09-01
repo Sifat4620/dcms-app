@@ -1,6 +1,6 @@
-import { useState } from "react";
-import Layout, { Card, Badge, Btn } from "../components/Layout";
-import { notifications } from "../data/mockData";
+import { useEffect, useState } from "react";
+import Layout, { Card, Badge, Btn, Field, Input, Modal } from "../components/Layout";
+import { api } from "../data/api";
 
 interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
@@ -8,34 +8,41 @@ interface PageProps {
   onLogout: () => void;
 }
 
-const TEMPLATES = [
-  { id: "T1", event: "Appointment Confirmation", channel: "SMS", status: "Active", template: "Dear {patient_name}, your appointment with {doctor_name} is confirmed for {date} at {time}. Token #{token}." },
-  { id: "T2", event: "Report Ready", channel: "SMS", status: "Active", template: "Dear {patient_name}, your diagnostic report is ready. Visit us or access via secure link: {link}" },
-  { id: "T3", event: "Payment Due Reminder", channel: "SMS", status: "Active", template: "Dear {patient_name}, you have an outstanding balance of BDT {amount}. Please clear at your earliest convenience." },
-  { id: "T4", event: "Appointment Reminder (1 day)", channel: "SMS", status: "Active", template: "Reminder: Your appointment with {doctor_name} is tomorrow at {time}. Please arrive 10 mins early." },
-  { id: "T5", event: "Birthday Greeting", channel: "SMS", status: "Inactive", template: "Happy Birthday, {patient_name}! Wishing you great health. Enjoy 10% off your next visit." },
-];
-
-type TriggerItem = { label: string; enabled: boolean };
-
-const INITIAL_TRIGGERS: TriggerItem[] = [
-  { label: "Report Ready", enabled: true },
-  { label: "Appointment Confirmation", enabled: true },
-  { label: "Appointment Reminder (24h)", enabled: true },
-  { label: "Payment Due", enabled: true },
-  { label: "Birthday Greeting", enabled: false },
-  { label: "Follow-up Reminder", enabled: false },
-  { label: "Promotional Campaign", enabled: false },
-  { label: "Token Update", enabled: true },
-];
-
 export default function Notifications({ pageProps, user, onLogout }: PageProps) {
-  const [triggers, setTriggers] = useState<TriggerItem[]>(INITIAL_TRIGGERS);
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [stats, setStats] = useState({ sentToday: 0, delivered: 0, failed: 0, thisMonth: 0 });
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState<Record<string, any>>({});
 
-  const toggleTrigger = (index: number) => {
-    setTriggers((prev) =>
-      prev.map((t, i) => (i === index ? { ...t, enabled: !t.enabled } : t))
-    );
+  const load = () => {
+    api.get<any>("/notifications/templates").then(setTemplates).catch(() => {});
+    api.get<any>("/notifications?limit=50").then(setNotifications).catch(() => {});
+    api.get<any>("/notifications/stats").then(setStats).catch(() => {});
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const toggleTemplate = (t: any) => {
+    api.put(`/notifications/templates/${t.template_id}`, { ...t, is_active: t.is_active ? 0 : 1 })
+      .then(() => load()).catch(() => {});
+  };
+
+  const handleAdd = async () => {
+    try {
+      await api.post("/notifications/templates", {
+        event_name: form.event_name,
+        channel: form.channel || "SMS",
+        body: form.body,
+      });
+      setShowAdd(false);
+      setForm({});
+      load();
+    } catch (e: any) {
+      alert(e.message);
+    }
   };
 
   return (
@@ -45,122 +52,148 @@ export default function Notifications({ pageProps, user, onLogout }: PageProps) 
       breadcrumb={pageProps.breadcrumb}
       user={user}
       onLogout={onLogout}
-      actions={<Btn>+ Add Template</Btn>}
+      actions={<Btn onClick={() => setShowAdd(true)}>+ Add Template</Btn>}
     >
       <div className="space-y-4">
-        {/* Stats */}
         <div className="grid grid-cols-4 gap-3">
-          {[
-            { label: "Sent Today", value: "47", color: "text-slate-900", bg: "bg-white", border: "border-slate-200" },
-            { label: "Delivered", value: "45", color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
-            { label: "Failed", value: "2", color: "text-red-500", bg: "bg-red-50", border: "border-red-200" },
-            { label: "This Month", value: "1,234", color: "text-slate-900", bg: "bg-white", border: "border-slate-200" },
-          ].map((s) => (
-            <div key={s.label} className={`rounded-lg border ${s.border} ${s.bg} p-4`}>
-              <div className="text-[11px] text-slate-500">{s.label}</div>
-              <div className={`text-2xl font-semibold ${s.color}`}>{s.value}</div>
-            </div>
-          ))}
+          <div className="bg-white rounded-lg border border-slate-200 p-4">
+            <div className="text-[11px] text-slate-500">Sent Today</div>
+            <div className="text-2xl font-semibold text-slate-900">{stats.sentToday}</div>
+          </div>
+          <div className="bg-emerald-50 rounded-lg border border-emerald-200 p-4">
+            <div className="text-[11px] text-emerald-600">Delivered</div>
+            <div className="text-2xl font-semibold text-emerald-600">{stats.delivered}</div>
+          </div>
+          <div className="bg-red-50 rounded-lg border border-red-200 p-4">
+            <div className="text-[11px] text-red-500">Failed</div>
+            <div className="text-2xl font-semibold text-red-500">{stats.failed}</div>
+          </div>
+          <div className="bg-white rounded-lg border border-slate-200 p-4">
+            <div className="text-[11px] text-slate-500">This Month</div>
+            <div className="text-2xl font-semibold text-slate-900">{stats.thisMonth}</div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Templates */}
           <Card>
-            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+            <div className="px-4 py-3 border-b border-slate-100">
               <h3 className="text-xs font-semibold text-slate-800">Notification Templates</h3>
             </div>
             <div className="divide-y divide-slate-50">
-              {TEMPLATES.map((t) => (
-                <div key={t.id} className="px-4 py-3">
+              {templates.map((t) => (
+                <div key={t.template_id} className="px-4 py-3">
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-slate-800">{t.event}</span>
+                      <span className="text-xs font-medium text-slate-800">{t.event_name}</span>
                       <Badge label={t.channel} color="blue" />
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge label={t.status} color={t.status === "Active" ? "green" : "gray"} />
-                      <Btn size="xs" variant="ghost">Edit</Btn>
+                      <Badge label={t.is_active ? "Active" : "Inactive"} color={t.is_active ? "green" : "gray"} />
+                      <Btn size="xs" variant="ghost" onClick={() => toggleTemplate(t)}>
+                        {t.is_active ? "Disable" : "Enable"}
+                      </Btn>
                     </div>
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed font-mono bg-slate-50 rounded px-2 py-1.5">
-                    {t.template}
+                    {t.body}
                   </p>
                 </div>
               ))}
+              {templates.length === 0 && (
+                <div className="px-4 py-8 text-center text-xs text-slate-400">No templates yet</div>
+              )}
             </div>
           </Card>
 
-          {/* Notification log */}
           <Card>
             <div className="px-4 py-3 border-b border-slate-100">
               <h3 className="text-xs font-semibold text-slate-800">Recent Notifications</h3>
             </div>
             <div className="divide-y divide-slate-50">
               {notifications.map((n) => (
-                <div key={n.id} className="px-4 py-3">
+                <div key={n.notification_id} className="px-4 py-3">
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-slate-700">{n.recipient}</span>
-                      <Badge label={n.type} color="blue" />
+                      <span className="text-xs font-medium text-slate-700">{n.recipient_name || "—"}</span>
+                      <Badge label={n.channel} color="blue" />
                     </div>
-                    <Badge label={n.status} color={n.status === "Delivered" ? "green" : "red"} />
+                    <Badge label={n.status} color={n.status === "Delivered" || n.status === "Sent" ? "green" : "red"} />
                   </div>
                   <p className="text-[11px] text-slate-500 leading-relaxed mb-1">{n.message}</p>
                   <div className="flex items-center gap-3 text-[10px] text-slate-400">
-                    <span className="font-mono">{n.phone}</span>
+                    <span className="font-mono">{n.recipient_phone || "—"}</span>
                     <span>·</span>
-                    <span>{n.channel}</span>
-                    <span>·</span>
-                    <span className="font-mono">{n.sentAt}</span>
+                    <span className="font-mono">{n.created_at}</span>
                   </div>
                 </div>
               ))}
+              {notifications.length === 0 && (
+                <div className="px-4 py-8 text-center text-xs text-slate-400">No notifications sent yet</div>
+              )}
             </div>
           </Card>
         </div>
 
-        {/* Improved notification trigger toggles */}
         <Card className="p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-xs font-semibold text-slate-800">Automatic Trigger Settings</h3>
-            <span className="text-[11px] text-slate-400">{triggers.filter((t) => t.enabled).length}/{triggers.length} active</span>
+            <span className="text-[11px] text-slate-400">{templates.filter((t) => t.is_active).length}/{templates.length} active</span>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {triggers.map((item, index) => (
+            {templates.map((item) => (
               <button
-                key={item.label}
-                onClick={() => toggleTrigger(index)}
+                key={item.template_id}
+                onClick={() => toggleTemplate(item)}
                 className={`flex items-center justify-between p-3 rounded-lg border text-left transition-all ${
-                  item.enabled
-                    ? "bg-sky-50 border-sky-200 hover:bg-sky-100"
-                    : "bg-slate-50 border-slate-100 hover:bg-slate-100"
+                  item.is_active ? "bg-sky-50 border-sky-200 hover:bg-sky-100" : "bg-slate-50 border-slate-100 hover:bg-slate-100"
                 }`}
               >
                 <div className="flex-1 min-w-0 mr-2">
-                  <span className={`text-[11px] font-medium leading-tight block ${item.enabled ? "text-sky-800" : "text-slate-500"}`}>
-                    {item.label}
+                  <span className={`text-[11px] font-medium leading-tight block ${item.is_active ? "text-sky-800" : "text-slate-500"}`}>
+                    {item.event_name}
                   </span>
-                  <span className={`text-[10px] mt-0.5 block ${item.enabled ? "text-sky-500" : "text-slate-400"}`}>
-                    {item.enabled ? "Active" : "Inactive"}
+                  <span className={`text-[10px] mt-0.5 block ${item.is_active ? "text-sky-500" : "text-slate-400"}`}>
+                    {item.is_active ? "Active" : "Inactive"}
                   </span>
                 </div>
-                {/* Improved toggle */}
-                <div
-                  className={`w-9 h-5 rounded-full relative flex-shrink-0 transition-colors ${
-                    item.enabled ? "bg-sky-500" : "bg-slate-200"
-                  }`}
-                >
-                  <div
-                    className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${
-                      item.enabled ? "translate-x-4" : "translate-x-0.5"
-                    }`}
-                  />
+                <div className={`w-9 h-5 rounded-full relative flex-shrink-0 transition-colors ${item.is_active ? "bg-sky-500" : "bg-slate-200"}`}>
+                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${item.is_active ? "translate-x-4" : "translate-x-0.5"}`} />
                 </div>
               </button>
             ))}
           </div>
         </Card>
       </div>
+
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Notification Template">
+        <div className="space-y-3">
+          <Field label="Event Name" required>
+            <Input placeholder="e.g. Appointment Confirmation" value={form.event_name || ""} onChange={(v) => setForm({ ...form, event_name: v })} />
+          </Field>
+          <Field label="Channel">
+            <select
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400 bg-white"
+              value={form.channel || "SMS"}
+              onChange={(e) => setForm({ ...form, channel: e.target.value })}
+            >
+              {["SMS", "Email"].map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
+          <Field label="Template Body" required>
+            <textarea
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400 font-mono"
+              rows={3}
+              placeholder="Dear {patient_name}, ..."
+              value={form.body || ""}
+              onChange={(e) => setForm({ ...form, body: e.target.value })}
+            />
+          </Field>
+        </div>
+        <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-slate-100">
+          <Btn variant="secondary" onClick={() => setShowAdd(false)}>Cancel</Btn>
+          <Btn onClick={handleAdd}>Add Template</Btn>
+        </div>
+      </Modal>
     </Layout>
   );
 }
