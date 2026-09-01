@@ -1,6 +1,6 @@
-import { useState } from "react";
-import Layout, { Card, Badge, Btn, SearchBar, Table, TR, TD } from "../components/Layout";
-import { invoices } from "../data/mockData";
+import { useEffect, useState } from "react";
+import Layout, { Card, Badge, Btn, SearchBar, Table, TR, TD, Modal, Field, Input } from "../components/Layout";
+import { api } from "../data/api";
 
 interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
@@ -8,41 +8,48 @@ interface PageProps {
   onLogout: () => void;
 }
 
-const METHOD_COLOR: Record<string, "green" | "blue" | "purple" | "gray" | "orange"> = {
+const METHOD_COLOR: Record<string, "green" | "blue" | "purple"> = {
   Cash: "green",
   Card: "blue",
   bKash: "purple",
-  Nagad: "orange",
-  "Bank Transfer": "gray",
-  "—": "gray",
 };
-
-const METHOD_COLORS_HEX: Record<string, string> = {
-  Cash: "#10B981",
-  bKash: "#8B5CF6",
-  Card: "#3B82F6",
-  Nagad: "#F59E0B",
-  "Bank Transfer": "#94A3B8",
-};
-
-const PAYMENT_METHODS = [
-  { method: "Cash", amount: 98000, pct: 42 },
-  { method: "bKash", amount: 62000, pct: 27 },
-  { method: "Card", amount: 48000, pct: 21 },
-  { method: "Nagad", amount: 18000, pct: 8 },
-  { method: "Bank Transfer", amount: 6000, pct: 2 },
-];
 
 export default function Payments({ pageProps, user, onLogout }: PageProps) {
   const [search, setSearch] = useState("");
-  const duePatients = invoices.filter((i) => i.due > 0);
-  const paidInvoices = invoices.filter((i) => i.status !== "Unpaid");
+  const [dueList, setDueList] = useState<any[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
+  const [payTarget, setPayTarget] = useState<any | null>(null);
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState("Cash");
 
-  const filteredDue = duePatients.filter(
-    (i) =>
-      i.patient.toLowerCase().includes(search.toLowerCase()) ||
-      i.id.includes(search)
+  const load = () => {
+    api.get<any>("/billing/due").then(setDueList).catch(() => {});
+    api.get<any>("/billing/payments?limit=100").then(setPayments).catch(() => {});
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const filteredDue = dueList.filter(
+    (i) => (i.patient_name || "").toLowerCase().includes(search.toLowerCase()) || (i.invoice_no || "").toLowerCase().includes(search.toLowerCase())
   );
+
+  const totalOutstanding = dueList.reduce((s, i) => s + (i.due_amount || 0), 0);
+
+  const recordPayment = async () => {
+    try {
+      await api.post(`/billing/invoices/${payTarget.invoice_id}/payments`, {
+        amount: Number(amount),
+        payment_method: method,
+      });
+      setPayTarget(null);
+      setAmount("");
+      load();
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
 
   return (
     <Layout
@@ -54,131 +61,104 @@ export default function Payments({ pageProps, user, onLogout }: PageProps) {
       actions={
         <>
           <SearchBar placeholder="Patient or invoice..." value={search} onChange={setSearch} />
-          <Btn>+ Record Payment</Btn>
         </>
       }
     >
       <div className="space-y-4">
-        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="bg-emerald-50 rounded-lg border border-emerald-200 p-4">
-            <div className="text-[11px] text-emerald-600">Today Collected</div>
-            <div className="text-2xl font-semibold text-emerald-700">৳ 38,450</div>
-          </div>
           <div className="bg-white rounded-lg border border-slate-200 p-4">
-            <div className="text-[11px] text-slate-500">Monthly Collected</div>
-            <div className="text-2xl font-semibold text-slate-900">৳ 2,32,000</div>
+            <div className="text-[11px] text-slate-500">Payments Received</div>
+            <div className="text-2xl font-semibold text-slate-900">{payments.length}</div>
           </div>
           <div className="bg-red-50 rounded-lg border border-red-200 p-4">
             <div className="text-[11px] text-red-500">Total Outstanding</div>
-            <div className="text-2xl font-semibold text-red-600">৳ {duePatients.reduce((s, i) => s + i.due, 0).toLocaleString()}</div>
+            <div className="text-2xl font-semibold text-red-600">৳ {totalOutstanding.toLocaleString()}</div>
           </div>
           <div className="bg-amber-50 rounded-lg border border-amber-200 p-4">
-            <div className="text-[11px] text-amber-600">Patients with Due</div>
-            <div className="text-2xl font-semibold text-amber-600">{duePatients.length}</div>
+            <div className="text-[11px] text-amber-600">Invoices with Due</div>
+            <div className="text-2xl font-semibold text-amber-600">{dueList.length}</div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Due payments with Collect Due button */}
           <Card>
             <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
               <h3 className="text-xs font-semibold text-slate-800">Outstanding Dues</h3>
-              <Badge label={`${duePatients.length} patients`} color="red" />
+              <Badge label={`${dueList.length} invoices`} color="red" />
             </div>
             <div className="divide-y divide-slate-50">
               {filteredDue.map((inv) => (
-                <div key={inv.id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors">
+                <div key={inv.invoice_id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors">
                   <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-600 text-xs font-bold flex-shrink-0">
-                    {inv.patient[0]}
+                    {(inv.patient_name || "?").slice(0, 1)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-slate-800">{inv.patient}</div>
-                    <div className="text-[10px] font-mono text-slate-400">{inv.id}</div>
-                    {/* Due progress mini bar */}
-                    <div className="mt-1 h-1 bg-slate-100 rounded-full overflow-hidden w-24">
-                      <div
-                        className="h-full bg-red-400 rounded-full"
-                        style={{ width: `${Math.round((inv.due / inv.total) * 100)}%` }}
-                      />
-                    </div>
+                    <div className="text-xs font-medium text-slate-800">{inv.patient_name}</div>
+                    <div className="text-[10px] font-mono text-slate-400">{inv.invoice_no}</div>
                   </div>
                   <div className="text-right mr-1">
-                    <div className="text-sm font-semibold text-red-500">৳ {inv.due.toLocaleString()}</div>
-                    <div className="text-[10px] text-slate-400">of ৳ {inv.total.toLocaleString()}</div>
+                    <div className="text-sm font-semibold text-red-500">৳ {inv.due_amount.toLocaleString()}</div>
+                    <div className="text-[10px] text-slate-400">of ৳ {inv.total_amount.toLocaleString()}</div>
                   </div>
-                  <Btn size="xs" variant="primary">Collect Due</Btn>
+                  <Btn size="xs" variant="primary" onClick={() => setPayTarget(inv)}>Collect Due</Btn>
                 </div>
               ))}
+              {filteredDue.length === 0 && (
+                <div className="px-4 py-8 text-center text-xs text-slate-400">No outstanding dues</div>
+              )}
             </div>
           </Card>
 
-          {/* Payment method breakdown — improved bars */}
-          <Card className="p-4">
-            <h3 className="text-xs font-semibold text-slate-800 mb-4">Payment Methods (This Month)</h3>
-            <div className="space-y-3">
-              {PAYMENT_METHODS.map((m) => {
-                const color = METHOD_COLORS_HEX[m.method] || "#94A3B8";
-                return (
-                  <div key={m.method}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="w-3 h-3 rounded-sm flex-shrink-0"
-                          style={{ background: color }}
-                        />
-                        <span className="text-xs font-medium text-slate-700">{m.method}</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-mono text-xs font-semibold text-slate-800">৳ {m.amount.toLocaleString()}</span>
-                        <span className="text-[10px] text-slate-400 ml-1">({m.pct}%)</span>
-                      </div>
-                    </div>
-                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all"
-                        style={{ width: `${m.pct}%`, background: color }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+          <Card>
+            <div className="px-4 py-3 border-b border-slate-100">
+              <h3 className="text-xs font-semibold text-slate-800">Recent Payments</h3>
             </div>
-            <div className="mt-4 pt-3 border-t border-slate-100">
-              <div className="flex justify-between text-[11px]">
-                <span className="text-slate-500">Total This Month</span>
-                <span className="font-semibold font-mono text-slate-900">৳ 2,32,000</span>
-              </div>
+            <div className="divide-y divide-slate-50">
+              {payments.slice(0, 8).map((p) => (
+                <div key={p.payment_id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors">
+                  <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 text-xs font-bold flex-shrink-0">
+                    {(p.payment_method || "?").slice(0, 1)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium text-slate-800">Invoice #{p.invoice_id}</div>
+                    <div className="text-[10px] text-slate-400">{p.payment_date}</div>
+                  </div>
+                  <Badge label={p.payment_method || "Cash"} color={METHOD_COLOR[p.payment_method] || "green"} />
+                  <div className="text-sm font-semibold text-emerald-600">৳ {p.amount.toLocaleString()}</div>
+                </div>
+              ))}
+              {payments.length === 0 && (
+                <div className="px-4 py-8 text-center text-xs text-slate-400">No payments recorded</div>
+              )}
             </div>
           </Card>
         </div>
-
-        {/* Payment history */}
-        <Card>
-          <div className="px-4 py-3 border-b border-slate-100">
-            <h3 className="text-xs font-semibold text-slate-800">Payment History</h3>
-          </div>
-          <Table headers={["Invoice No.", "Patient", "Date", "Total", "Paid", "Due", "Method", "Status"]}>
-            {paidInvoices.map((inv) => (
-              <TR key={inv.id}>
-                <TD mono>{inv.id}</TD>
-                <TD><span className="font-medium text-slate-800">{inv.patient}</span></TD>
-                <TD mono>{inv.date}</TD>
-                <TD mono>৳ {inv.total.toLocaleString()}</TD>
-                <TD mono><span className="text-emerald-600">৳ {inv.paid.toLocaleString()}</span></TD>
-                <TD mono>{inv.due > 0 ? <span className="text-red-500">৳ {inv.due}</span> : "—"}</TD>
-                <TD><Badge label={inv.method} color={METHOD_COLOR[inv.method] || "gray"} /></TD>
-                <TD>
-                  <Badge
-                    label={inv.status}
-                    color={inv.status === "Paid" ? "green" : inv.status === "Partial" ? "yellow" : "red"}
-                  />
-                </TD>
-              </TR>
-            ))}
-          </Table>
-        </Card>
       </div>
+
+      <Modal open={!!payTarget} onClose={() => setPayTarget(null)} title={`Collect Payment — ${payTarget?.invoice_no || ""}`}>
+        <div className="space-y-3">
+          <div className="p-3 rounded-lg bg-slate-50 border border-slate-100 text-xs">
+            <div className="text-slate-500">Patient: <span className="font-medium text-slate-800">{payTarget?.patient_name}</span></div>
+            <div className="text-slate-500">Outstanding due: <span className="font-mono font-semibold text-red-500">৳ {payTarget?.due_amount?.toLocaleString()}</span></div>
+          </div>
+          <Field label="Amount" required>
+            <Input type="number" placeholder="Amount (BDT)" value={amount} onChange={setAmount} />
+          </Field>
+          <Field label="Payment Method">
+            <select
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400 bg-white"
+              value={method}
+              onChange={(e) => setMethod(e.target.value)}
+            >
+              {["Cash", "Card", "bKash"].map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </Field>
+        </div>
+        <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-slate-100">
+          <Btn variant="secondary" onClick={() => setPayTarget(null)}>Cancel</Btn>
+          <Btn onClick={recordPayment}>Record Payment</Btn>
+        </div>
+      </Modal>
     </Layout>
   );
 }

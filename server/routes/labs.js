@@ -17,7 +17,7 @@ router.get('/orders', (req, res) => {
     if (visit_id) { query += ' AND to2.visit_id = ?'; params.push(visit_id); }
     if (status) { query += ' AND to2.status = ?'; params.push(status); }
 
-    const countQ = query.replace(/SELECT to2\.\*.*FROM/, 'SELECT COUNT(*) as total FROM');
+    const countQ = query.replace(/SELECT to2\.\*[\s\S]*?FROM/, 'SELECT COUNT(*) as total FROM');
     const { total } = db.prepare(countQ).get(...params);
 
     query += ' ORDER BY to2.created_at DESC LIMIT ? OFFSET ?';
@@ -132,7 +132,7 @@ router.get('/reports', (req, res) => {
     const params = [];
     if (status) { query += ' AND r.status = ?'; params.push(status); }
 
-    const countQ = query.replace(/SELECT r\.\*.*FROM/, 'SELECT COUNT(*) as total FROM');
+    const countQ = query.replace(/SELECT r\.\*[\s\S]*?FROM/, 'SELECT COUNT(*) as total FROM');
     const { total } = db.prepare(countQ).get(...params);
 
     query += ' ORDER BY r.report_date DESC LIMIT ? OFFSET ?';

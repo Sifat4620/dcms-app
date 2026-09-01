@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Layout, { Card, Btn, Badge } from "../components/Layout";
+import { api } from "../data/api";
 
 interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
@@ -8,14 +9,6 @@ interface PageProps {
 }
 
 const TABS = ["Branch", "Users", "Roles", "Test Config", "System"];
-
-const USERS = [
-  { id: "USR-001", name: "Admin User", email: "admin@medicare.com", role: "Super Admin", branch: "All", status: "Active", lastLogin: "2026-08-31 09:00" },
-  { id: "USR-002", name: "Jahangir Alam", email: "jahangir@medicare.com", role: "Receptionist", branch: "Dhaka Main", status: "Active", lastLogin: "2026-08-31 08:30" },
-  { id: "USR-003", name: "Nusrat Jahan", email: "nusrat@medicare.com", role: "Cashier", branch: "Dhaka Main", status: "Active", lastLogin: "2026-08-31 08:45" },
-  { id: "USR-004", name: "Nasim Ahmed", email: "nasim@medicare.com", role: "Lab Technician", branch: "Dhaka Main", status: "Active", lastLogin: "2026-08-31 08:00" },
-  { id: "USR-005", name: "Sumaiya Akter", email: "sumaiya@medicare.com", role: "Sample Collector", branch: "Dhaka Main", status: "Active", lastLogin: "2026-08-31 08:10" },
-];
 
 const ROLES = [
   { name: "Super Admin", permissions: 42, users: 1, color: "#8B5CF6" },
@@ -33,6 +26,11 @@ const MAX_PERMISSIONS = 42;
 
 export default function Settings({ pageProps, user, onLogout }: PageProps) {
   const [tab, setTab] = useState("Branch");
+  const [users, setUsers] = useState<any[]>([]);
+
+  useEffect(() => {
+    api.get<any>("/admin/users").then(setUsers).catch(() => {});
+  }, []);
 
   return (
     <Layout
@@ -120,22 +118,22 @@ export default function Settings({ pageProps, user, onLogout }: PageProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {USERS.map((u) => (
-                    <tr key={u.id} className="border-b border-slate-50 hover:bg-slate-50">
-                      <td className="px-4 py-2.5 font-mono text-[11px] text-slate-500">{u.id}</td>
+                  {users.map((u) => (
+                    <tr key={u.user_id} className="border-b border-slate-50 hover:bg-slate-50">
+                      <td className="px-4 py-2.5 font-mono text-[11px] text-slate-500">USR-{u.user_id}</td>
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-2">
                           <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-[10px] font-bold">
-                            {u.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                            {(u.name || "?").split(" ").map((n: any) => n[0]).join("").slice(0, 2)}
                           </div>
                           <span className="font-medium text-slate-800">{u.name}</span>
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-slate-500">{u.email}</td>
-                      <td className="px-4 py-2.5"><Badge label={u.role} color={u.role === "Super Admin" ? "purple" : "blue"} /></td>
-                      <td className="px-4 py-2.5 text-slate-600">{u.branch}</td>
-                      <td className="px-4 py-2.5 font-mono text-[11px] text-slate-400">{u.lastLogin}</td>
-                      <td className="px-4 py-2.5"><Badge label={u.status} color="green" /></td>
+                      <td className="px-4 py-2.5"><Badge label={u.role_name} color={u.role_name === "Super Admin" ? "purple" : "blue"} /></td>
+                      <td className="px-4 py-2.5 text-slate-600">{u.branch_name || "All"}</td>
+                      <td className="px-4 py-2.5 font-mono text-[11px] text-slate-400">—</td>
+                      <td className="px-4 py-2.5"><Badge label={u.status} color={u.status === "active" ? "green" : "gray"} /></td>
                       <td className="px-4 py-2.5">
                         <div className="flex gap-1">
                           <Btn size="xs" variant="secondary">Edit</Btn>
@@ -144,6 +142,9 @@ export default function Settings({ pageProps, user, onLogout }: PageProps) {
                       </td>
                     </tr>
                   ))}
+                  {users.length === 0 && (
+                    <tr><td className="px-4 py-8 text-center text-slate-400" colSpan={8}>No users found</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>

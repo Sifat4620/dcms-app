@@ -32,7 +32,7 @@ router.get('/', (req, res) => {
     if (category_id) { query += ' AND t.category_id = ?'; params.push(category_id); }
     if (department_id) { query += ' AND t.department_id = ?'; params.push(department_id); }
 
-    const countQ = query.replace(/SELECT t\.\*.*FROM/, 'SELECT COUNT(*) as total FROM');
+    const countQ = query.replace(/SELECT t\.\*[\s\S]*?FROM/, 'SELECT COUNT(*) as total FROM');
     const { total } = db.prepare(countQ).get(...params);
 
     query += ' ORDER BY t.test_name LIMIT ? OFFSET ?';

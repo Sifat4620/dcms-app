@@ -16,7 +16,7 @@ router.get('/invoices', (req, res) => {
     if (status) { query += ' AND i.status = ?'; params.push(status); }
     if (patient_id) { query += ' AND pv.patient_id = ?'; params.push(patient_id); }
 
-    const countQ = query.replace(/SELECT i\.\*.*FROM/, 'SELECT COUNT(*) as total FROM');
+    const countQ = query.replace(/SELECT i\.\*[\s\S]*?FROM/, 'SELECT COUNT(*) as total FROM');
     const { total } = db.prepare(countQ).get(...params);
 
     query += ' ORDER BY i.invoice_date DESC LIMIT ? OFFSET ?';

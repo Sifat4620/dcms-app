@@ -19,7 +19,7 @@ router.get('/', (req, res) => {
     if (status) { query += ' AND a.status = ?'; params.push(status); }
     if (date) { query += ' AND a.appointment_date = ?'; params.push(date); }
 
-    const countQuery = query.replace(/SELECT a\.\*.*FROM/, 'SELECT COUNT(*) as total FROM');
+    const countQuery = query.replace(/SELECT a\.\*[\s\S]*?FROM/, 'SELECT COUNT(*) as total FROM');
     const { total } = db.prepare(countQuery).get(...params);
 
     query += ' ORDER BY a.appointment_date DESC, a.appointment_time DESC LIMIT ? OFFSET ?';

@@ -1,6 +1,6 @@
-import { useState } from "react";
-import Layout, { Card, Badge, Btn, SearchBar, Table, TR, TD } from "../components/Layout";
-import { samples } from "../data/mockData";
+import { useEffect, useState } from "react";
+import Layout, { Card, Badge, Btn, SearchBar, Table, TR, TD, Modal, Field, Input } from "../components/Layout";
+import { api } from "../data/api";
 
 interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
@@ -9,20 +9,16 @@ interface PageProps {
 }
 
 const STATUS_COLOR: Record<string, "yellow" | "blue" | "green" | "purple" | "gray" | "red"> = {
-  Pending: "yellow",
   Collected: "blue",
-  Received: "purple",
   Processing: "blue",
   Completed: "green",
   Rejected: "red",
 };
 
-const STATUS_STEPS = ["Pending", "Collected", "Received", "Processing", "Completed"];
+const STATUS_STEPS = ["Collected", "Processing", "Completed"];
 
 const STEP_DOT_COLORS: Record<string, string> = {
-  Pending: "#F59E0B",
   Collected: "#3B82F6",
-  Received: "#8B5CF6",
   Processing: "#0EA5E9",
   Completed: "#10B981",
 };
@@ -30,18 +26,48 @@ const STEP_DOT_COLORS: Record<string, string> = {
 export default function Barcode({ pageProps, user, onLogout }: PageProps) {
   const [search, setSearch] = useState("");
   const [scanned, setScanned] = useState("");
-  const [scanResult, setScanResult] = useState<typeof samples[0] | null>(null);
+  const [scanResult, setScanResult] = useState<any | null>(null);
+  const [samples, setSamples] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [showNew, setShowNew] = useState(false);
+  const [orderItemId, setOrderItemId] = useState("");
+  const [sampleType, setSampleType] = useState("");
 
-  const handleScan = () => {
-    const found = samples.find((s) => s.barcode === scanned.trim());
-    setScanResult(found || null);
+  const loadSamples = () => {
+    api.get<any>("/labs/samples").then(setSamples).catch(() => {});
+    api.get<any>("/labs/orders?limit=200").then((res) => setOrders(res.data)).catch(() => {});
+  };
+
+  useEffect(() => {
+    loadSamples();
+  }, []);
+
+  const handleScan = async () => {
+    if (!scanned.trim()) return;
+    try {
+      const result = await api.get(`/labs/samples/barcode/${scanned.trim()}`);
+      setScanResult(result);
+    } catch {
+      setScanResult(null);
+    }
+  };
+
+  const handleNewSample = async () => {
+    try {
+      await api.post("/labs/samples", { order_item_id: Number(orderItemId), sample_type: sampleType, collected_by: user.name });
+      setShowNew(false);
+      setOrderItemId("");
+      setSampleType("");
+      loadSamples();
+    } catch (e: any) {
+      alert(e.message);
+    }
   };
 
   const filtered = samples.filter(
     (s) =>
-      s.patient.toLowerCase().includes(search.toLowerCase()) ||
-      s.barcode.includes(search) ||
-      s.orderId.includes(search)
+      (s.patient_name || "").toLowerCase().includes(search.toLowerCase()) ||
+      (s.sample_barcode || "").includes(search)
   );
 
   const stepCounts = STATUS_STEPS.reduce((acc, s) => {
@@ -58,8 +84,8 @@ export default function Barcode({ pageProps, user, onLogout }: PageProps) {
       onLogout={onLogout}
       actions={
         <>
-          <SearchBar placeholder="Patient, barcode, order..." value={search} onChange={setSearch} />
-          <Btn>+ New Sample</Btn>
+          <SearchBar placeholder="Patient, barcode..." value={search} onChange={setSearch} />
+          <Btn onClick={() => setShowNew(true)}>+ New Sample</Btn>
         </>
       }
     >
@@ -87,14 +113,10 @@ export default function Barcode({ pageProps, user, onLogout }: PageProps) {
               <div className="mt-3 p-3 rounded-lg border border-sky-200 bg-sky-50">
                 <div className="text-xs font-semibold text-sky-800 mb-2">Sample Found</div>
                 <div className="space-y-1 text-[11px]">
-                  <div><span className="text-slate-500">Patient:</span> <span className="font-medium text-slate-800">{scanResult.patient}</span></div>
-                  <div><span className="text-slate-500">Test:</span> <span className="font-medium">{scanResult.test}</span></div>
-                  <div><span className="text-slate-500">Type:</span> {scanResult.type}</div>
+                  <div><span className="text-slate-500">Patient:</span> <span className="font-medium text-slate-800">{scanResult.patient_name}</span></div>
+                  <div><span className="text-slate-500">Test:</span> <span className="font-medium">{scanResult.test_name}</span></div>
+                  <div><span className="text-slate-500">Type:</span> {scanResult.sample_type}</div>
                   <div><span className="text-slate-500">Status:</span> <Badge label={scanResult.status} color={STATUS_COLOR[scanResult.status] || "gray"} /></div>
-                </div>
-                <div className="flex gap-1 mt-2">
-                  <Btn size="xs" variant="primary">Update Status</Btn>
-                  <Btn size="xs" variant="secondary">Enter Result</Btn>
                 </div>
               </div>
             )}
@@ -150,21 +172,20 @@ export default function Barcode({ pageProps, user, onLogout }: PageProps) {
           <div className="px-4 py-3 border-b border-slate-100">
             <h3 className="text-xs font-semibold text-slate-800">Sample Tracking</h3>
           </div>
-          <Table headers={["Sample ID", "Barcode", "Patient", "Test", "Type", "Collected By", "Time", "Status", "Actions"]}>
+          <Table headers={["Sample ID", "Barcode", "Patient", "Test", "Type", "Collected By", "Status", "Actions"]}>
             {filtered.map((s) => (
-              <TR key={s.id}>
-                <TD mono>{s.id}</TD>
+              <TR key={s.sample_id}>
+                <TD mono>S-{s.sample_id}</TD>
                 <TD>
-                  <span className="font-mono text-[11px] bg-slate-100 px-1.5 py-0.5 rounded">{s.barcode}</span>
+                  <span className="font-mono text-[11px] bg-slate-100 px-1.5 py-0.5 rounded">{s.sample_barcode}</span>
                 </TD>
                 <TD>
-                  <div className="font-medium text-slate-800">{s.patient}</div>
-                  <div className="text-[10px] text-slate-400 font-mono">{s.orderId}</div>
+                  <div className="font-medium text-slate-800">{s.patient_name}</div>
+                  <div className="text-[10px] text-slate-400 font-mono">{s.patient_unique_id}</div>
                 </TD>
-                <TD>{s.test}</TD>
-                <TD>{s.type}</TD>
-                <TD>{s.collectedBy}</TD>
-                <TD mono>{s.collectedAt}</TD>
+                <TD>{s.test_name}</TD>
+                <TD><span className="text-[11px] text-slate-600">{s.sample_type}</span></TD>
+                <TD>{s.collected_by}</TD>
                 <TD>
                   <div className="flex items-center gap-1.5">
                     <span
@@ -175,16 +196,42 @@ export default function Barcode({ pageProps, user, onLogout }: PageProps) {
                   </div>
                 </TD>
                 <TD>
-                  <div className="flex gap-1">
-                    <Btn size="xs" variant="secondary">Update</Btn>
-                    {s.status === "Processing" && <Btn size="xs" variant="primary">Enter Result</Btn>}
-                  </div>
+                  <Badge label={s.collection_status || s.status} color="blue" />
                 </TD>
               </TR>
             ))}
+            {filtered.length === 0 && (
+              <TR><TD className="text-center py-8 text-slate-400">No samples found</TD></TR>
+            )}
           </Table>
         </Card>
       </div>
+
+      <Modal open={showNew} onClose={() => setShowNew(false)} title="Collect New Sample">
+        <Field label="Order Item" required>
+          <select
+            className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400 bg-white"
+            value={orderItemId}
+            onChange={(e) => setOrderItemId(e.target.value)}
+          >
+            <option value="">Select pending order item</option>
+            {orders.flatMap((o: any) =>
+              (o.items || []).filter((it: any) => it.status !== "Sample Collected").map((it: any) => (
+                <option key={it.order_item_id} value={it.order_item_id}>
+                  Order #{o.order_id} — Test #{it.test_id}
+                </option>
+              ))
+            )}
+          </select>
+        </Field>
+        <Field label="Sample Type" required>
+          <Input placeholder="Blood / Urine" value={sampleType} onChange={setSampleType} />
+        </Field>
+        <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-slate-100">
+          <Btn variant="secondary" onClick={() => setShowNew(false)}>Cancel</Btn>
+          <Btn onClick={handleNewSample}>Collect Sample</Btn>
+        </div>
+      </Modal>
     </Layout>
   );
 }
