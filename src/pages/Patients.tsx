@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Layout, { Card, Badge, Btn, SearchBar, Table, TR, TD, Modal, Field, Input } from "../components/Layout";
-import { patients } from "../data/mockData";
+import { api } from "../data/api";
 
 interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
@@ -25,21 +25,53 @@ const AVATAR_COLORS = [
 export default function Patients({ pageProps, user, onLogout }: PageProps) {
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [patients, setPatients] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
   const [form, setForm] = useState({ name: "", dob: "", gender: "", blood: "", mobile: "", email: "", address: "", emergency: "" });
+
+  const loadData = () => {
+    api.get<any>(`/patients?limit=100`).then((res) => {
+      setPatients(res.data);
+      setTotal(res.total);
+    }).catch(() => {});
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
 
   const filtered = patients.filter(
     (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.id.toLowerCase().includes(search.toLowerCase()) ||
-      p.mobile.includes(search)
+      (p.name || "").toLowerCase().includes(search.toLowerCase()) ||
+      (p.patient_unique_id || "").toLowerCase().includes(search.toLowerCase()) ||
+      (p.mobile || "").includes(search)
   );
 
-  const activeCount = patients.filter((p) => p.status === "Active").length;
+  const activeCount = patients.length;
+
+  const handleRegister = async () => {
+    setLoading(true);
+    try {
+      await api.post("/patients", {
+        name: form.name, date_of_birth: form.dob, gender: form.gender,
+        blood_group: form.blood, mobile: form.mobile, email: form.email,
+        address: form.address, emergency_contact: form.emergency,
+      });
+      setShowAdd(false);
+      setForm({ name: "", dob: "", gender: "", blood: "", mobile: "", email: "", address: "", emergency: "" });
+      loadData();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <Layout
       title={pageProps.title}
-      subtitle={`${patients.length} total patients`}
+      subtitle={`${total} total patients`}
       breadcrumb={pageProps.breadcrumb}
       user={user}
       onLogout={onLogout}
@@ -59,10 +91,9 @@ export default function Patients({ pageProps, user, onLogout }: PageProps) {
         {/* Mini stats row */}
         <div className="grid grid-cols-4 gap-3">
           {[
-            { label: "Total Patients", value: patients.length, color: "text-slate-900", bg: "bg-white", border: "border-slate-200" },
+            { label: "Total Patients", value: total, color: "text-slate-900", bg: "bg-white", border: "border-slate-200" },
             { label: "Active", value: activeCount, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
-            { label: "New This Month", value: 47, color: "text-sky-600", bg: "bg-sky-50", border: "border-sky-200" },
-            { label: "Pending Follow-up", value: 12, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-200" },
+            { label: "Registered", value: total, color: "text-sky-600", bg: "bg-sky-50", border: "border-sky-200" },
           ].map((s) => (
             <div key={s.label} className={`rounded-lg border ${s.border} ${s.bg} px-4 py-3`}>
               <div className="text-[11px] text-slate-500">{s.label}</div>
@@ -73,43 +104,39 @@ export default function Patients({ pageProps, user, onLogout }: PageProps) {
 
         {/* Table */}
         <Card>
-          <Table headers={["Patient ID", "Name", "Age / Gender", "Blood Group", "Mobile", "Email", "Last Visit", "Status", "Actions"]}>
+          <Table headers={["Patient ID", "Name", "Gender", "Blood Group", "Mobile", "Email", "DOB", "Actions"]}>
             {filtered.map((p, idx) => {
               const av = AVATAR_COLORS[idx % AVATAR_COLORS.length];
               return (
-                <TR key={p.id}>
-                  <TD mono>{p.id}</TD>
+                <TR key={p.patient_id}>
+                  <TD mono>{p.patient_unique_id}</TD>
                   <TD>
                     <div className="flex items-center gap-2">
                       <div
                         className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
                         style={{ background: av.bg, color: av.text }}
                       >
-                        {p.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                        {(p.name || "?").split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
                       </div>
                       <span className="font-medium text-slate-800">{p.name}</span>
                     </div>
                   </TD>
-                  <TD>{p.age} / {p.gender}</TD>
-                  <TD><Badge label={p.blood} color={BLOOD_COLORS[p.blood] || "gray"} /></TD>
-                  <TD mono>{p.mobile}</TD>
-                  <TD>{p.email}</TD>
-                  <TD mono>{p.lastVisit}</TD>
-                  <TD>
-                    <div className="flex items-center gap-1.5">
-                      <div className={`w-1.5 h-1.5 rounded-full ${p.status === "Active" ? "bg-emerald-500" : "bg-slate-300"}`} />
-                      <Badge label={p.status} color={p.status === "Active" ? "green" : "gray"} />
-                    </div>
-                  </TD>
+                  <TD>{p.gender || "—"}</TD>
+                  <TD><Badge label={p.blood_group || "—"} color={BLOOD_COLORS[p.blood_group] || "gray"} /></TD>
+                  <TD mono>{p.mobile || "—"}</TD>
+                  <TD>{p.email || "—"}</TD>
+                  <TD mono>{p.date_of_birth || "—"}</TD>
                   <TD>
                     <div className="flex gap-1">
                       <Btn size="xs" variant="secondary">View</Btn>
-                      <Btn size="xs" variant="ghost">Edit</Btn>
                     </div>
                   </TD>
                 </TR>
               );
             })}
+            {filtered.length === 0 && (
+              <TR><TD className="text-center py-8" >No patients found</TD></TR>
+            )}
           </Table>
         </Card>
       </div>
@@ -144,7 +171,7 @@ export default function Patients({ pageProps, user, onLogout }: PageProps) {
         </div>
         <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-slate-100">
           <Btn variant="secondary" onClick={() => setShowAdd(false)}>Cancel</Btn>
-          <Btn onClick={() => setShowAdd(false)}>Register Patient</Btn>
+          <Btn onClick={handleRegister} disabled={loading}>{loading ? "Saving..." : "Register Patient"}</Btn>
         </div>
       </Modal>
     </Layout>

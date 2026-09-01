@@ -1,10 +1,21 @@
+import { useEffect, useState } from "react";
 import Layout, { StatCard, Card, CardHeader, Badge, Btn } from "../components/Layout";
-import { revenueData, patients, appointments, inventoryItems, tokens, reports, invoices } from "../data/mockData";
+import { api } from "../data/api";
 
 interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
   user: { name: string; role: string; email: string };
   onLogout: () => void;
+}
+
+interface DashboardData {
+  today: { patients: number; appointments: number; completed: number; pending: number };
+  queue: { current: number };
+  lab: { pendingTests: number; pendingReports: number };
+  financial: { todayRevenue: number; monthRevenue: number; totalDue: number };
+  alerts: { lowStock: number };
+  recentPatients: any[];
+  recentAppointments: any[];
 }
 
 const ICONS = {
@@ -22,14 +33,19 @@ const APT_STATUS_COLOR: Record<string, "blue" | "green" | "gray" | "red" | "yell
 };
 
 export default function Dashboard({ pageProps, user, onLogout }: PageProps) {
-  const lowStock = inventoryItems.filter((i) => i.status === "Low Stock");
-  const todayApts = appointments.filter((a) => a.date === "2026-08-31");
-  const waiting = tokens.filter((t) => t.status === "Waiting");
-  const serving = tokens.find((t) => t.status === "Serving");
-  const pendingReports = reports.filter((r) => r.status === "Draft" || r.status === "Verified");
-  const totalDue = invoices.reduce((s, i) => s + i.due, 0);
+  const [data, setData] = useState<DashboardData | null>(null);
 
-  const maxRevenue = Math.max(...revenueData.map((d) => d.revenue));
+  useEffect(() => {
+    api.get<DashboardData>("/dashboard").then(setData).catch(() => {});
+  }, []);
+
+  const todayApts = data?.recentAppointments || [];
+  const pendingReports = data?.lab.pendingReports || 0;
+  const totalDue = data?.financial.totalDue || 0;
+  const manualRevenue = [
+    { month: "Current Mt", revenue: Math.round((data?.financial.monthRevenue || 0) / 1000) * 1000, patients: 0 },
+  ];
+  const maxRevenue = Math.max(1000, ...manualRevenue.map((d) => d.revenue));
 
   return (
     <Layout
@@ -42,12 +58,12 @@ export default function Dashboard({ pageProps, user, onLogout }: PageProps) {
     <div className="space-y-5">
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-        <StatCard label="Today's Patients" value={47} icon={ICONS.patients} color="blue" trend={{ value: "8 more than yesterday", up: true }} />
-        <StatCard label="Appointments" value={todayApts.length} icon={ICONS.calendar} color="green" trend={{ value: `${todayApts.filter(a=>a.status==="Confirmed").length} confirmed`, up: true }} />
-        <StatCard label="Queue Active" value={waiting.length + 1} icon={ICONS.queue} color="purple" sub="1 serving now" />
-        <StatCard label="Tests Pending" value={23} icon={ICONS.lab} color="amber" sub="5 marked urgent" />
-        <StatCard label="Today's Revenue" value="৳38,450" icon={ICONS.revenue} color="teal" trend={{ value: "+12% vs yesterday", up: true }} />
-        <StatCard label="Reports Pending" value={pendingReports.length} icon={ICONS.report} color="red" sub={`৳${totalDue.toLocaleString()} due`} />
+        <StatCard label="Today's Patients" value={data?.today.patients ?? 0} icon={ICONS.patients} color="blue" trend={{ value: "registrations today", up: true }} />
+        <StatCard label="Appointments" value={data?.today.appointments ?? 0} icon={ICONS.calendar} color="green" trend={{ value: `${data?.today.completed ?? 0} completed`, up: true }} />
+        <StatCard label="Queue Active" value={data?.queue.current ?? 0} icon={ICONS.queue} color="purple" sub="waiting now" />
+        <StatCard label="Tests Pending" value={data?.lab.pendingTests ?? 0} icon={ICONS.lab} color="amber" sub="awaiting processing" />
+        <StatCard label="Today's Revenue" value={`৳${(data?.financial.todayRevenue ?? 0).toLocaleString()}`} icon={ICONS.revenue} color="teal" trend={{ value: "generated today", up: true }} />
+        <StatCard label="Reports Pending" value={pendingReports} icon={ICONS.report} color="red" sub={`৳${totalDue.toLocaleString()} due`} />
       </div>
 
       {/* Main grid */}
@@ -57,23 +73,18 @@ export default function Dashboard({ pageProps, user, onLogout }: PageProps) {
         <Card className="xl:col-span-2">
           <CardHeader
             title="Revenue Overview"
-            subtitle="Last 6 months · BDT"
-            action={
-              <div className="flex items-center gap-3 text-[11px] text-slate-500">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block bg-sky-500" />This month</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block bg-slate-200" />Previous</span>
-              </div>
-            }
+            subtitle="Current month · BDT"
+            action={<span className="text-[11px] text-slate-500">Month to date</span>}
           />
           <div className="p-5">
             <div className="flex items-end gap-3 h-40">
-              {revenueData.map((d) => (
+              {manualRevenue.map((d) => (
                 <div key={d.month} className="flex-1 flex flex-col items-center gap-1.5">
                   <span className="text-[10px] text-slate-400 font-mono">{(d.revenue / 1000).toFixed(0)}k</span>
                   <div className="relative w-full group">
                     <div
                       className="w-full rounded-t-md transition-all cursor-pointer hover:opacity-90"
-                      style={{ height: `${(d.revenue / maxRevenue) * 116}px`, background: d.month === "Aug" ? "#0EA5E9" : "#E2E8F0" }}
+                      style={{ height: `${(d.revenue / maxRevenue) * 116}px`, background: "#0EA5E9" }}
                     />
                     <div className="absolute -top-8 left-1/2 -translate-x-1/2 hidden group-hover:block bg-slate-800 text-white text-[10px] rounded px-2 py-1 whitespace-nowrap">
                       ৳{d.revenue.toLocaleString()}
@@ -81,58 +92,40 @@ export default function Dashboard({ pageProps, user, onLogout }: PageProps) {
                   </div>
                   <div>
                     <span className="text-[10px] font-semibold text-slate-600">{d.month}</span>
-                    <div className="text-[9px] text-slate-400 text-center">{d.patients}pts</div>
                   </div>
                 </div>
               ))}
             </div>
             <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500">
-              <span>Total 6M: <strong className="text-slate-900">৳ 13,38,000</strong></span>
-              <span>Avg/month: <strong className="text-slate-900">৳ 2,23,000</strong></span>
-              <span>Peak: <strong className="text-slate-900">Aug · ৳2,68,000</strong></span>
+              <span>Month revenue: <strong className="text-slate-900">৳ {(data?.financial.monthRevenue ?? 0).toLocaleString()}</strong></span>
+              <span>Due: <strong className="text-slate-900">৳ {totalDue.toLocaleString()}</strong></span>
+              <span>Low stock: <strong className="text-slate-900">{data?.alerts.lowStock ?? 0}</strong></span>
             </div>
           </div>
         </Card>
 
-        {/* Live queue */}
+        {/* Live queue summary */}
         <Card>
-          <CardHeader title="Live Token Queue" subtitle="Real-time status" action={<Badge label="LIVE" color="green" />} />
+          <CardHeader title="Operational Summary" subtitle="Real-time status" action={<Badge label="LIVE" color="green" />} />
           <div className="p-4 space-y-3">
             <div className="rounded-xl p-4 text-center" style={{ background: "#0F172A" }}>
-              <p className="text-[10px] text-slate-400 uppercase tracking-widest mb-1">Now Serving</p>
-              <p className="text-4xl font-bold text-white font-mono">{serving?.token.replace("T-", "0") || "—"}</p>
-              <p className="text-sky-400 text-xs mt-1">{serving?.doctor || "—"}</p>
-              <p className="text-slate-500 text-[11px]">{serving?.dept} · {serving?.counter}</p>
-            </div>
-
-            <div className="space-y-1.5">
-              {tokens.filter((t) => t.status === "Waiting").slice(0, 4).map((t, i) => (
-                <div key={t.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-slate-50 hover:bg-sky-50/50 transition-colors">
-                  <span className="text-[11px] font-mono font-semibold text-slate-500 w-4">{i + 1}</span>
-                  <div className="w-7 h-7 rounded-md flex items-center justify-center font-mono font-bold text-xs" style={{ background: "#E2E8F0", color: "#475569" }}>
-                    {t.token.replace("T-", "")}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-slate-700 truncate">{t.patient}</p>
-                    <p className="text-[10px] text-slate-400">{t.dept}</p>
-                  </div>
-                  <Badge label={t.type} color={t.type === "Emergency" ? "red" : t.type === "Priority" ? "orange" : "gray"} />
-                </div>
-              ))}
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest mb-1">Tests Waiting</p>
+              <p className="text-4xl font-bold text-white font-mono">{data?.lab.pendingTests ?? 0}</p>
+              <p className="text-sky-400 text-xs mt-1">Reports pending approval: {data?.lab.pendingReports ?? 0}</p>
             </div>
 
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="bg-slate-50 rounded-lg py-2">
-                <p className="text-base font-bold text-sky-600">{waiting.length}</p>
-                <p className="text-[10px] text-slate-400">Waiting</p>
+                <p className="text-base font-bold text-sky-600">{data?.today.patients ?? 0}</p>
+                <p className="text-[10px] text-slate-400">Patients</p>
               </div>
               <div className="bg-slate-50 rounded-lg py-2">
-                <p className="text-base font-bold text-emerald-600">{tokens.filter(t => t.status === "Completed").length}</p>
+                <p className="text-base font-bold text-emerald-600">{data?.today.completed ?? 0}</p>
                 <p className="text-[10px] text-slate-400">Done</p>
               </div>
               <div className="bg-slate-50 rounded-lg py-2">
-                <p className="text-base font-bold text-slate-600">{tokens.length}</p>
-                <p className="text-[10px] text-slate-400">Total</p>
+                <p className="text-base font-bold text-slate-600">{data?.today.pending ?? 0}</p>
+                <p className="text-[10px] text-slate-400">Pending</p>
               </div>
             </div>
           </div>
@@ -145,23 +138,24 @@ export default function Dashboard({ pageProps, user, onLogout }: PageProps) {
         {/* Today's appointments */}
         <Card className="xl:col-span-2">
           <CardHeader
-            title="Today's Appointments"
-            subtitle="31 Aug 2026"
-            action={<Btn size="xs" variant="secondary">View All</Btn>}
+            title="Recent Appointments"
+            subtitle="Latest bookings"
           />
           <div className="divide-y divide-slate-50">
-            {todayApts.map((a) => (
-              <div key={a.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50/50 transition-colors">
+            {todayApts.length === 0 ? (
+              <div className="px-5 py-8 text-center text-xs text-slate-400">No appointments yet</div>
+            ) : todayApts.map((a) => (
+              <div key={a.appointment_id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50/50 transition-colors">
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ background: "#0EA5E9" }}>
-                  {a.patient.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                  {(a.patient_name || "?").split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-slate-800">{a.patient}</p>
-                  <p className="text-[11px] text-slate-400">{a.doctor}</p>
+                  <p className="text-xs font-semibold text-slate-800">{a.patient_name}</p>
+                  <p className="text-[11px] text-slate-400">{a.doctor_name}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs font-mono font-semibold text-slate-700">{a.time}</p>
-                  <p className="text-[10px] text-slate-400 font-mono">Token #{a.token}</p>
+                  <p className="text-xs font-mono font-semibold text-slate-700">{a.appointment_time}</p>
+                  <p className="text-[10px] text-slate-400 font-mono">Token #{a.token_no}</p>
                 </div>
                 <Badge label={a.status} color={APT_STATUS_COLOR[a.status] || "gray"} />
               </div>
@@ -173,20 +167,10 @@ export default function Dashboard({ pageProps, user, onLogout }: PageProps) {
         <div className="space-y-4">
           {/* Low stock alerts */}
           <Card>
-            <CardHeader title="Low Stock Alerts" action={<Badge label={`${lowStock.length}`} color="red" />} />
-            <div className="divide-y divide-slate-50">
-              {lowStock.slice(0, 3).map((item) => (
-                <div key={item.id} className="flex items-center justify-between px-5 py-2.5">
-                  <div>
-                    <p className="text-xs font-medium text-slate-700">{item.name}</p>
-                    <p className="text-[10px] text-slate-400">{item.category}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs font-bold text-red-500">{item.stock} {item.unit}</p>
-                    <p className="text-[10px] text-slate-400">Min {item.reorderLevel}</p>
-                  </div>
-                </div>
-              ))}
+            <CardHeader title="Inventory Alerts" action={<Badge label={`${data?.alerts.lowStock ?? 0}`} color="red" />} />
+            <div className="p-5 text-xs text-slate-500">
+              <p className="text-[11px] font-medium text-slate-700">Low stock items: {data?.alerts.lowStock ?? 0}</p>
+              <p className="mt-1">Items below reorder level need attention.</p>
             </div>
           </Card>
 
@@ -214,16 +198,18 @@ export default function Dashboard({ pageProps, user, onLogout }: PageProps) {
           <Card>
             <CardHeader title="Recent Registrations" />
             <div className="divide-y divide-slate-50">
-              {patients.slice(0, 3).map((p) => (
-                <div key={p.id} className="flex items-center gap-2.5 px-5 py-2.5">
+              {(data?.recentPatients || []).length === 0 ? (
+                <div className="px-5 py-6 text-center text-xs text-slate-400">No patients yet</div>
+              ) : data!.recentPatients.slice(0, 3).map((p) => (
+                <div key={p.patient_id} className="flex items-center gap-2.5 px-5 py-2.5">
                   <div className="w-7 h-7 rounded-lg bg-sky-100 flex items-center justify-center text-sky-600 text-xs font-bold flex-shrink-0">
                     {p.name[0]}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-slate-700 truncate">{p.name}</p>
-                    <p className="text-[10px] text-slate-400 font-mono">{p.id}</p>
+                    <p className="text-[10px] text-slate-400 font-mono">{p.patient_unique_id}</p>
                   </div>
-                  <Badge label={p.gender} color={p.gender === "Male" ? "blue" : "purple"} />
+                  <Badge label={p.gender || "—"} color={p.gender === "Male" ? "blue" : p.gender === "Female" ? "purple" : "gray"} />
                 </div>
               ))}
             </div>

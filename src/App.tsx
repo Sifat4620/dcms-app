@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getStoredUser, setStoredUser, clearToken } from "./data/api";
 import Sidebar from "./components/Sidebar";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -19,9 +20,13 @@ import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
 
 export interface AppUser {
+  user_id?: number;
   name: string;
-  role: string;
+  role?: string;
+  role_name?: string;
   email: string;
+  branch_id?: number;
+  phone?: string;
 }
 
 type PageId = "dashboard" | "patients" | "doctors" | "appointments" | "tokens" | "labtests" | "barcode" | "reports" | "billing" | "payments" | "inventory" | "employees" | "corporate" | "notifications" | "analytics" | "settings";
@@ -45,7 +50,11 @@ const PAGE_PROPS: Record<PageId, { title: string; breadcrumb: string[] }> = {
   settings:      { title: "Administration & Settings", breadcrumb: ["Home", "System", "Settings"] },
 };
 
-type PageComponent = React.ComponentType<{ pageProps: { title: string; breadcrumb: string[] }; user: AppUser; onLogout: () => void }>;
+type PageComponent = React.ComponentType<{
+  pageProps: { title: string; breadcrumb: string[] };
+  user: AppUser & { role: string };
+  onLogout: () => void;
+}>;
 
 const PAGES: Record<PageId, PageComponent> = {
   dashboard:     (p) => <Dashboard {...p} />,
@@ -67,21 +76,33 @@ const PAGES: Record<PageId, PageComponent> = {
 };
 
 export default function App() {
-  const [user, setUser] = useState<AppUser | null>(null);
+  const [user, setUser] = useState<AppUser | null>(() => getStoredUser());
   const [activePage, setActivePage] = useState<PageId>("dashboard");
 
+  const handleLogin = (u: AppUser) => {
+    setUser(u);
+    setStoredUser(u);
+  };
+
+  const handleLogout = () => {
+    clearToken();
+    setStoredUser(null);
+    setUser(null);
+  };
+
   if (!user) {
-    return <Login onLogin={setUser} />;
+    return <Login onLogin={handleLogin} />;
   }
 
   const PageComponent = PAGES[activePage];
   const pageProps = PAGE_PROPS[activePage];
+  const role = user.role_name || user.role || "Super Admin";
 
   return (
     <div className="flex h-full overflow-hidden" style={{ background: "#F8FAFC" }}>
-      <Sidebar active={activePage} onNavigate={(id) => setActivePage(id as PageId)} userRole={user.role} />
+      <Sidebar active={activePage} onNavigate={(id) => setActivePage(id as PageId)} userRole={role} />
       <div className="flex-1 overflow-hidden min-w-0">
-        <PageComponent pageProps={pageProps} user={user} onLogout={() => setUser(null)} />
+        <PageComponent pageProps={pageProps} user={{ ...user, role }} onLogout={handleLogout} />
       </div>
     </div>
   );

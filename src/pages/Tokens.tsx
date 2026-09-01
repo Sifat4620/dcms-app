@@ -1,6 +1,6 @@
-import { useState } from "react";
-import Layout, { Card, Badge, Btn } from "../components/Layout";
-import { tokens as initialTokens } from "../data/mockData";
+import { useEffect, useState } from "react";
+import Layout, { Card, Badge, Btn, Modal, Field, Input } from "../components/Layout";
+import { api } from "../data/api";
 
 interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
@@ -23,21 +23,37 @@ const STATUS_COLOR: Record<string, "blue" | "green" | "gray" | "yellow" | "red">
 };
 
 export default function Tokens({ pageProps, user, onLogout }: PageProps) {
-  const [tokens, setTokens] = useState(initialTokens);
+  const [tokens, setTokens] = useState<any[]>([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({ token_type: "General", patient_note: "" });
+
+  const loadData = () => {
+    api.get<any>("/admin/tokens").then(setTokens).catch(() => {});
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
   const serving = tokens.find((t) => t.status === "Serving");
   const waiting = tokens.filter((t) => t.status === "Waiting");
 
   const callNext = () => {
-    setTokens((prev) => {
-      const updated = prev.map((t) =>
-        t.status === "Serving" ? { ...t, status: "Completed" } : t
-      );
-      const nextIdx = updated.findIndex((t) => t.status === "Waiting");
-      if (nextIdx !== -1) {
-        updated[nextIdx] = { ...updated[nextIdx], status: "Serving" };
-      }
-      return [...updated];
-    });
+    const current = tokens.find((t) => t.status === "Serving");
+    if (current) api.put(`/admin/tokens/${current.token_id}`, { status: "Completed" });
+    const next = waiting[0];
+    if (next) api.put(`/admin/tokens/${next.token_id}`, { status: "Serving" });
+    setTimeout(loadData, 100);
+  };
+
+  const handleAdd = async () => {
+    try {
+      await api.post("/admin/tokens", { branch_id: 1, token_type: form.token_type });
+      setShowAdd(false);
+      loadData();
+    } catch (e: any) {
+      alert(e.message);
+    }
   };
 
   return (
@@ -47,7 +63,7 @@ export default function Tokens({ pageProps, user, onLogout }: PageProps) {
       breadcrumb={pageProps.breadcrumb}
       user={user}
       onLogout={onLogout}
-      actions={<Btn>+ Issue Token</Btn>}
+      actions={<Btn onClick={() => setShowAdd(true)}>+ Issue Token</Btn>}
     >
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Display board */}
@@ -56,40 +72,27 @@ export default function Tokens({ pageProps, user, onLogout }: PageProps) {
             <div className="text-[11px] uppercase tracking-widest text-slate-400">Now Serving</div>
             {serving ? (
               <>
-                {/* Pulsing ring animation */}
                 <div className="relative inline-flex items-center justify-center mt-4 mb-2">
                   <span className="absolute inline-flex w-24 h-24 rounded-full opacity-20 animate-ping" style={{ background: "#0EA5E9" }} />
                   <span className="absolute inline-flex w-20 h-20 rounded-full opacity-30" style={{ background: "#0EA5E9" }} />
                   <span className="relative flex items-center justify-center w-16 h-16 rounded-full" style={{ background: "#0EA5E9" }}>
-                    <span className="text-2xl font-bold text-white font-mono">{serving.token.replace("T-", "")}</span>
+                    <span className="text-2xl font-bold text-white font-mono">{String(serving.token_no).padStart(3, "0")}</span>
                   </span>
                 </div>
-                <div className="text-3xl font-bold text-white font-mono mt-1">{serving.token}</div>
-                <div className="text-sm text-sky-400 mt-2">{serving.patient}</div>
-                <div className="text-xs text-slate-400 mt-1">{serving.dept}</div>
-                <div className="text-xs text-slate-500 mt-0.5">{serving.doctor}</div>
-                <div className="mt-3 inline-flex items-center gap-1.5 bg-white/10 rounded-full px-3 py-1">
-                  <span className="text-[11px] text-slate-300">Counter</span>
-                  <span className="text-[11px] font-mono font-semibold text-white">{serving.counter}</span>
-                </div>
+                <div className="text-3xl font-bold text-white font-mono mt-1">#{serving.token_no}</div>
+                <div className="text-xs text-slate-400 mt-1">{serving.department_name || "General"}</div>
               </>
             ) : (
               <div className="text-slate-400 mt-6 text-sm">Queue Empty</div>
             )}
 
-            {/* Estimated wait times */}
             {waiting.length > 0 && (
               <div className="mt-4 pt-3 border-t border-white/10">
                 <div className="text-[10px] text-slate-400 mb-1.5">Estimated Wait Times</div>
                 {waiting.slice(0, 3).map((t, i) => (
-                  <div key={t.id} className="flex items-center justify-between px-1 py-0.5">
-                    <span className="text-[11px] font-mono text-slate-400">{t.token}</span>
-                    <div className="flex items-center gap-1">
-                      <svg className="w-3 h-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span className="text-[11px] text-slate-400">~{(i + 1) * 12} min</span>
-                    </div>
+                  <div key={t.token_id} className="flex items-center justify-between px-1 py-0.5">
+                    <span className="text-[11px] font-mono text-slate-400">#{t.token_no}</span>
+                    <span className="text-[11px] text-slate-400">~{(i + 1) * 12} min</span>
                   </div>
                 ))}
                 {waiting.length > 3 && (
@@ -132,7 +135,6 @@ export default function Tokens({ pageProps, user, onLogout }: PageProps) {
             </div>
           </div>
 
-          {/* Queue stats */}
           <Card className="p-4">
             <div className="grid grid-cols-3 gap-2 text-center">
               <div>
@@ -154,54 +156,64 @@ export default function Tokens({ pageProps, user, onLogout }: PageProps) {
         {/* Token list */}
         <Card className="lg:col-span-2">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-            <h3 className="text-xs font-semibold text-slate-800">All Tokens Today</h3>
+            <h3 className="text-xs font-semibold text-slate-800">All Tokens</h3>
             <span className="text-[11px] text-slate-400">{tokens.length} total</span>
           </div>
           <div className="divide-y divide-slate-50">
-            {tokens.map((t, i) => {
-              const waitIdx = waiting.findIndex((w) => w.id === t.id);
+            {tokens.map((t) => {
+              const waitIdx = waiting.findIndex((w) => w.token_id === t.token_id);
               const estWait = waitIdx >= 0 ? `~${(waitIdx + 1) * 12} min` : null;
               return (
-                <div key={t.id} className={`flex items-center gap-3 px-4 py-3 transition-colors ${t.status === "Serving" ? "bg-sky-50" : "hover:bg-slate-50"}`}>
+                <div key={t.token_id} className={`flex items-center gap-3 px-4 py-3 transition-colors ${t.status === "Serving" ? "bg-sky-50" : "hover:bg-slate-50"}`}>
                   <div
                     className="w-10 h-10 rounded-lg flex items-center justify-center font-mono font-bold text-sm flex-shrink-0"
                     style={t.status === "Serving" ? { background: "#0EA5E9", color: "white" } : { background: "#F1F5F9", color: "#475569" }}
                   >
-                    {t.token.replace("T-", "")}
+                    {String(t.token_no).padStart(3, "0")}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-slate-800">{t.patient}</span>
-                      <Badge label={t.type} color={TYPE_COLOR[t.type] || "gray"} />
+                      <span className="text-xs font-medium text-slate-800">Token #{t.token_no}</span>
+                      <Badge label={t.token_type || "General"} color={TYPE_COLOR[t.token_type] || "gray"} />
                     </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">{t.dept} · {t.doctor}</div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">{t.department_name || "General"} · {t.doctor_name || "—"}</div>
                     {estWait && (
-                      <div className="text-[10px] text-amber-600 mt-0.5 flex items-center gap-1">
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        Est. wait: {estWait}
-                      </div>
+                      <div className="text-[10px] text-amber-600 mt-0.5">Est. wait: {estWait}</div>
                     )}
                   </div>
                   <div className="text-right">
                     <Badge label={t.status} color={STATUS_COLOR[t.status] || "gray"} />
-                    <div className="text-[10px] text-slate-400 mt-1 font-mono">{t.createdAt}</div>
                   </div>
                   <div className="flex gap-1 ml-2">
                     {t.status === "Waiting" && (
-                      <>
-                        <Btn size="xs" variant="primary">Call</Btn>
-                        <Btn size="xs" variant="ghost">Skip</Btn>
-                      </>
+                      <Btn size="xs" variant="primary" onClick={() => { api.put(`/admin/tokens/${t.token_id}`, { status: "Serving" }).then(loadData); }}>Call</Btn>
                     )}
                   </div>
                 </div>
               );
             })}
+            {tokens.length === 0 && (
+              <div className="px-4 py-8 text-center text-xs text-slate-400">No tokens issued yet</div>
+            )}
           </div>
         </Card>
       </div>
+
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Issue Token">
+        <div className="space-y-3">
+          <Field label="Token Type">
+            <select value={form.token_type} onChange={(e) => setForm({ ...form, token_type: e.target.value })} className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg">
+              <option>General</option>
+              <option>Priority</option>
+              <option>Emergency</option>
+            </select>
+          </Field>
+        </div>
+        <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-slate-100">
+          <Btn variant="secondary" onClick={() => setShowAdd(false)}>Cancel</Btn>
+          <Btn onClick={handleAdd}>Issue Token</Btn>
+        </div>
+      </Modal>
     </Layout>
   );
 }

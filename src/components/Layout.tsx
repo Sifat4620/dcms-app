@@ -33,15 +33,16 @@ type BtnVariant = "primary" | "secondary" | "danger" | "ghost";
 type BtnSize = "xs" | "sm" | "md";
 
 export function Btn({
-  children, variant = "primary", onClick, size = "sm", type = "button",
+  children, variant = "primary", onClick, size = "sm", type = "button", disabled = false,
 }: {
   children: React.ReactNode;
   variant?: BtnVariant;
   onClick?: () => void;
   size?: BtnSize;
   type?: "button" | "submit";
+  disabled?: boolean;
 }) {
-  const base = "inline-flex items-center gap-1.5 font-semibold rounded-lg transition-all cursor-pointer select-none";
+  const base = "inline-flex items-center gap-1.5 font-semibold rounded-lg transition-all cursor-pointer select-none disabled:opacity-60 disabled:cursor-not-allowed";
   const sizes: Record<BtnSize, string> = {
     xs: "px-2 py-1 text-[11px]",
     sm: "px-3 py-1.5 text-xs",
@@ -54,7 +55,7 @@ export function Btn({
     ghost: "text-slate-600 hover:bg-slate-100",
   };
   return (
-    <button type={type} className={`${base} ${sizes[size]} ${variants[variant]}`} onClick={onClick}>
+    <button type={type} className={`${base} ${sizes[size]} ${variants[variant]}`} onClick={onClick} disabled={disabled}>
       {children}
     </button>
   );

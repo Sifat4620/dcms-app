@@ -1,6 +1,6 @@
-import { useState } from "react";
-import Layout, { Card, Badge, Btn, SearchBar, Table, TR, TD } from "../components/Layout";
-import { appointments } from "../data/mockData";
+import { useEffect, useState } from "react";
+import Layout, { Card, Badge, Btn, SearchBar, Table, TR, TD, Modal, Field, Input } from "../components/Layout";
+import { api } from "../data/api";
 
 interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
@@ -30,15 +30,29 @@ const WEEK_DAYS = [
 export default function Appointments({ pageProps, user, onLogout }: PageProps) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
-  const [selectedDay, setSelectedDay] = useState(1); // Mon = today (Sept 1)
+  const [selectedDay, setSelectedDay] = useState(1);
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [patients, setPatients] = useState<any[]>([]);
+  const [doctors, setDoctors] = useState<any[]>([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({ patient_id: "", doctor_id: "", appointment_date: "", appointment_time: "" });
+
+  const loadData = () => {
+    api.get<any>("/appointments?limit=100").then((res) => setAppointments(res.data)).catch(() => {});
+    api.get<any>("/patients?limit=100").then((res) => setPatients(res.data)).catch(() => {});
+    api.get<any>("/doctors?limit=100").then((res) => setDoctors(res.data)).catch(() => {});
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
 
   const statuses = ["All", "Pending", "Confirmed", "Checked-in", "Completed", "Cancelled", "No Show"];
 
   const filtered = appointments.filter((a) => {
     const matchSearch =
-      a.patient.toLowerCase().includes(search.toLowerCase()) ||
-      a.doctor.toLowerCase().includes(search.toLowerCase()) ||
-      a.id.includes(search);
+      (a.patient_name || "").toLowerCase().includes(search.toLowerCase()) ||
+      (a.doctor_name || "").toLowerCase().includes(search.toLowerCase());
     const matchStatus = filter === "All" || a.status === filter;
     return matchSearch && matchStatus;
   });
@@ -47,6 +61,24 @@ export default function Appointments({ pageProps, user, onLogout }: PageProps) {
     acc[s] = appointments.filter((a) => a.status === s).length;
     return acc;
   }, {} as Record<string, number>);
+
+  const updateStatus = (id: number, status: string) => {
+    api.put(`/appointments/${id}`, { status }).then(() => loadData());
+  };
+
+  const handleAdd = async () => {
+    try {
+      await api.post("/appointments", {
+        branch_id: 1, patient_id: Number(form.patient_id), doctor_id: Number(form.doctor_id),
+        appointment_date: form.appointment_date, appointment_time: form.appointment_time,
+      });
+      setShowAdd(false);
+      setForm({ patient_id: "", doctor_id: "", appointment_date: "", appointment_time: "" });
+      loadData();
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
 
   const STATUS_DOT: Record<string, string> = {
     Confirmed: "#3B82F6",
@@ -67,51 +99,11 @@ export default function Appointments({ pageProps, user, onLogout }: PageProps) {
       actions={
         <>
           <SearchBar placeholder="Search patient or doctor..." value={search} onChange={setSearch} />
-          <Btn>+ Book Appointment</Btn>
+          <Btn onClick={() => setShowAdd(true)}>+ Book Appointment</Btn>
         </>
       }
     >
       <div className="space-y-4">
-        {/* Date selector bar */}
-        <div className="bg-white rounded-xl border border-slate-200 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Week of Sep 1, 2026</span>
-            <div className="flex gap-1">
-              <button className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:bg-slate-100">
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-              </button>
-              <button className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:bg-slate-100">
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
-              </button>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            {WEEK_DAYS.map((d) => {
-              const isToday = d.date === 1;
-              const isSelected = selectedDay === d.date;
-              return (
-                <button
-                  key={d.short}
-                  onClick={() => setSelectedDay(d.date)}
-                  className={`flex-1 flex flex-col items-center py-2 rounded-lg text-xs font-medium transition-all ${
-                    isSelected
-                      ? "bg-sky-500 text-white shadow-md shadow-sky-500/30"
-                      : isToday
-                      ? "bg-sky-50 text-sky-700 border border-sky-200"
-                      : "text-slate-500 hover:bg-slate-50"
-                  }`}
-                >
-                  <span className="text-[10px] mb-0.5">{d.short}</span>
-                  <span className="text-sm font-bold">{d.date}</span>
-                  {isToday && !isSelected && (
-                    <div className="w-1 h-1 rounded-full bg-sky-500 mt-0.5" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         {/* Status filter pills with count badges */}
         <div className="flex gap-2 flex-wrap">
           {statuses.map((s) => {
@@ -143,25 +135,23 @@ export default function Appointments({ pageProps, user, onLogout }: PageProps) {
         </div>
 
         <Card>
-          <Table headers={["Appt. ID", "Patient", "Doctor", "Date", "Time", "Token", "Fee (BDT)", "Status", "Actions"]}>
+          <Table headers={["Appt. ID", "Patient", "Doctor", "Date", "Time", "Token", "Status", "Actions"]}>
             {filtered.map((a) => (
-              <TR key={a.id}>
-                <TD mono>{a.id}</TD>
+              <TR key={a.appointment_id}>
+                <TD mono>APT-{a.appointment_id}</TD>
                 <TD>
                   <div>
-                    <div className="font-medium text-slate-800">{a.patient}</div>
-                    <div className="text-[10px] text-slate-400 font-mono">{a.patientId}</div>
+                    <div className="font-medium text-slate-800">{a.patient_name}</div>
                   </div>
                 </TD>
-                <TD>{a.doctor}</TD>
-                <TD mono>{a.date}</TD>
-                <TD mono>{a.time}</TD>
+                <TD>{a.doctor_name}</TD>
+                <TD mono>{a.appointment_date}</TD>
+                <TD mono>{a.appointment_time}</TD>
                 <TD>
                   <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded text-slate-700">
-                    #{a.token}
+                    #{a.token_no}
                   </span>
                 </TD>
-                <TD mono>৳ {a.fee}</TD>
                 <TD>
                   <div className="flex items-center gap-1.5">
                     <span
@@ -173,19 +163,57 @@ export default function Appointments({ pageProps, user, onLogout }: PageProps) {
                 </TD>
                 <TD>
                   <div className="flex gap-1">
-                    <Btn size="xs" variant="secondary">View</Btn>
-                    {a.status === "Pending" && <Btn size="xs" variant="primary">Confirm</Btn>}
-                    {a.status === "Confirmed" && <Btn size="xs" variant="primary">Check-in</Btn>}
-                    {(a.status === "Pending" || a.status === "Confirmed") && (
-                      <Btn size="xs" variant="danger">Cancel</Btn>
+                    {a.status === "Pending" && <Btn size="xs" variant="primary" onClick={() => updateStatus(a.appointment_id, "Confirmed")}>Confirm</Btn>}
+                    {a.status === "Confirmed" && <Btn size="xs" variant="primary" onClick={() => updateStatus(a.appointment_id, "Checked-in")}>Check-in</Btn>}
+                    {a.status === "Checked-in" && <Btn size="xs" variant="primary" onClick={() => updateStatus(a.appointment_id, "Completed")}>Complete</Btn>}
+                    {["Pending", "Confirmed"].includes(a.status) && (
+                      <Btn size="xs" variant="danger" onClick={() => updateStatus(a.appointment_id, "Cancelled")}>Cancel</Btn>
                     )}
                   </div>
                 </TD>
               </TR>
             ))}
+            {filtered.length === 0 && (
+              <TR><TD className="text-center py-8 text-slate-400">No appointments found</TD></TR>
+            )}
           </Table>
         </Card>
       </div>
+
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Book Appointment">
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Patient" required>
+            <select
+              value={form.patient_id}
+              onChange={(e) => setForm({ ...form, patient_id: e.target.value })}
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg"
+            >
+              <option value="">Select patient</option>
+              {patients.map((p) => <option key={p.patient_id} value={p.patient_id}>{p.name} ({p.patient_unique_id})</option>)}
+            </select>
+          </Field>
+          <Field label="Doctor" required>
+            <select
+              value={form.doctor_id}
+              onChange={(e) => setForm({ ...form, doctor_id: e.target.value })}
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg"
+            >
+              <option value="">Select doctor</option>
+              {doctors.map((d) => <option key={d.doctor_id} value={d.doctor_id}>{d.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Date" required>
+            <Input type="date" value={form.appointment_date} onChange={(v) => setForm({ ...form, appointment_date: v })} />
+          </Field>
+          <Field label="Time" required>
+            <Input type="time" value={form.appointment_time} onChange={(v) => setForm({ ...form, appointment_time: v })} />
+          </Field>
+        </div>
+        <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-slate-100">
+          <Btn variant="secondary" onClick={() => setShowAdd(false)}>Cancel</Btn>
+          <Btn onClick={handleAdd}>Book Appointment</Btn>
+        </div>
+      </Modal>
     </Layout>
   );
 }

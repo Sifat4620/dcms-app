@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { api, setToken, setStoredUser } from "../data/api";
 
 const ROLES = [
   "Super Admin",
@@ -12,32 +13,53 @@ const ROLES = [
 ];
 
 interface LoginProps {
-  onLogin: (user: { name: string; role: string; email: string }) => void;
+  onLogin: (user: { name: string; role: string; email: string; role_name?: string; user_id?: number }) => void;
 }
 
 export default function Login({ onLogin }: LoginProps) {
   const [tab, setTab] = useState<"login" | "signup">("login");
   const [showPass, setShowPass] = useState(false);
-  const [loginData, setLoginData] = useState({ email: "admin@medicare.com", password: "Admin@1234", role: "Super Admin" });
+  const [loginData, setLoginData] = useState({ email: "admin@dcms.com", password: "admin123" });
   const [signupData, setSignupData] = useState({ name: "", email: "", phone: "", role: "Receptionist", password: "", confirm: "" });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
+    setError("");
+    try {
+      const res = await api.post<any>("/auth/login", { email: loginData.email, password: loginData.password });
+      setToken(res.token);
+      onLogin(res.user);
+      setStoredUser(res.user);
+    } catch (err: any) {
+      setError(err.message || "Login failed");
+    } finally {
       setLoading(false);
-      onLogin({ name: "Admin User", role: loginData.role, email: loginData.email });
-    }, 900);
+    }
   };
 
-  const handleSignup = (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (signupData.password !== signupData.confirm) {
+      setError("Passwords do not match");
+      return;
+    }
     setLoading(true);
-    setTimeout(() => {
+    setError("");
+    try {
+      await api.post("/auth/register", {
+        name: signupData.name,
+        email: signupData.email,
+        phone: signupData.phone,
+        password: signupData.password,
+      });
+      await handleLogin(e as any);
+    } catch (err: any) {
+      setError(err.message || "Registration failed");
       setLoading(false);
-      onLogin({ name: signupData.name || "New User", role: signupData.role, email: signupData.email });
-    }, 900);
+    }
   };
 
   return (
@@ -144,21 +166,11 @@ export default function Login({ onLogin }: LoginProps) {
                     <p className="text-slate-400 text-sm mt-0.5">Sign in to your DCMS account</p>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Role</label>
-                    <div className="relative">
-                      <select
-                        value={loginData.role}
-                        onChange={(e) => setLoginData({ ...loginData, role: e.target.value })}
-                        className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-400 bg-white appearance-none"
-                      >
-                        {ROLES.map((r) => <option key={r}>{r}</option>)}
-                      </select>
-                      <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                      </svg>
+                  {error && (
+                    <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                      {error}
                     </div>
-                  </div>
+                  )}
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1.5">Email Address</label>
@@ -223,7 +235,7 @@ export default function Login({ onLogin }: LoginProps) {
                   </button>
 
                   <div className="text-center text-xs text-slate-400 pt-1">
-                    Demo: <span className="font-mono text-slate-600">admin@medicare.com</span> / <span className="font-mono text-slate-600">Admin@1234</span>
+                    Demo: <span className="font-mono text-slate-600">admin@dcms.com</span> / <span className="font-mono text-slate-600">admin123</span>
                   </div>
                 </form>
               ) : (
