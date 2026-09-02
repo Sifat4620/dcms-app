@@ -39,6 +39,7 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
   const [payTarget, setPayTarget] = useState<any | null>(null);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("Cash");
+  const [trxNo, setTrxNo] = useState("");
   const [invoiceData, setInvoiceData] = useState<any | null>(null);
 
   const load = () => {
@@ -110,15 +111,32 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
     }
   };
 
+  const openPay = (inv: any) => {
+    setPayTarget(inv);
+    setAmount("");
+    setMethod("Cash");
+    setTrxNo("");
+  };
+
   const recordPayment = async () => {
+    if (!amount || Number(amount) <= 0) {
+      alert("Enter a valid amount");
+      return;
+    }
+    if (method !== "Cash" && !trxNo.trim()) {
+      alert("Transaction number (Trx ID) is required for non-cash payments");
+      return;
+    }
     try {
       await api.post(`/billing/invoices/${payTarget.invoice_id}/payments`, {
         amount: Number(amount),
         payment_method: method,
+        transaction_no: method !== "Cash" ? trxNo.trim() : null,
       });
       const invId = payTarget.invoice_id;
       setPayTarget(null);
       setAmount("");
+      setTrxNo("");
       load();
       openInvoice(invId);
     } catch (e: any) {
@@ -247,7 +265,7 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
                     </div>
                     <div className="flex items-center gap-1.5">
                       <Btn size="xs" variant="secondary" onClick={() => openInvoice(inv.invoice_id)}>Invoice</Btn>
-                      <Btn size="xs" variant="primary" onClick={() => setPayTarget(inv)}>Collect Due</Btn>
+                      <Btn size="xs" variant="primary" onClick={() => openPay(inv)}>Collect Due</Btn>
                     </div>
                   </div>
                 ))}
@@ -270,6 +288,7 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
                     <div className="flex-1 min-w-0">
                       <div className="text-xs font-medium text-slate-800">Invoice #{p.invoice_id}</div>
                       <div className="text-[10px] text-slate-400">{p.payment_date}</div>
+                      {p.transaction_no && <div className="text-[10px] font-mono text-sky-600">Trx: {p.transaction_no}</div>}
                     </div>
                     <Badge label={p.payment_method || "Cash"} color={METHOD_COLOR[p.payment_method] || "green"} />
                     <div className="text-sm font-semibold text-emerald-600">৳ {p.amount.toLocaleString()}</div>
@@ -351,14 +370,19 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
             <select
               className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400 bg-white"
               value={method}
-              onChange={(e) => setMethod(e.target.value)}
+              onChange={(e) => { setMethod(e.target.value); setTrxNo(""); }}
             >
               {["Cash", "Card", "Mobile Banking", "Bank Transfer", "Online Payment"].map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
           </Field>
+          {method !== "Cash" && (
+            <Field label="Transaction Number (Trx ID)" required>
+              <Input placeholder="bKash/Card/Online Trx ID" value={trxNo} onChange={setTrxNo} />
+            </Field>
+          )}
         </div>
         <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-slate-100">
-          <Btn variant="secondary" onClick={() => setPayTarget(null)}>Cancel</Btn>
+          <Btn variant="secondary" onClick={() => { setPayTarget(null); setTrxNo(""); }}>Cancel</Btn>
           <Btn onClick={recordPayment}>Record Payment</Btn>
         </div>
       </Modal>

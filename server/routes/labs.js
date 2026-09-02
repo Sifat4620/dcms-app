@@ -107,7 +107,7 @@ router.get('/samples', (req, res) => {
 // it creates a standalone visit invoice. Any amount paid is applied to the invoice.
 router.post('/collect', (req, res) => {
   try {
-    const { patient_id, doctor_id, test_id, sample_type, consultation_fee = 0, amount_paid = 0, payment_method = 'Cash', discount = 0, appointment_id = null } = req.body;
+    const { patient_id, doctor_id, test_id, sample_type, consultation_fee = 0, amount_paid = 0, payment_method = 'Cash', transaction_no = null, discount = 0, appointment_id = null } = req.body;
 
     if (!patient_id || !test_id) {
       return res.status(400).json({ error: 'patient_id and test_id are required' });
@@ -139,6 +139,9 @@ router.post('/collect', (req, res) => {
     const fee = apt ? (Number(apt.fee) || 0) : (Number(consultation_fee) || 0);
     const testPrice = Number(test.price) || 0;
     const paid = Number(amount_paid) || 0;
+    if (paid > 0 && payment_method !== 'Cash' && !transaction_no) {
+      return res.status(400).json({ error: 'Transaction number is required for non-cash payments' });
+    }
 
     // 1. Create a visit (link to appointment if we have one)
     const visitRes = db.prepare('INSERT INTO patient_visits (patient_id, branch_id, appointment_id, visit_type, referred_by) VALUES (?, ?, ?, ?, ?)')
@@ -207,8 +210,8 @@ router.post('/collect', (req, res) => {
       const newStatus = newDue <= 0 ? 'Paid' : newPaid > 0 ? 'Partial' : 'Unpaid';
       db.prepare('UPDATE invoices SET paid_amount=?, due_amount=?, status=? WHERE invoice_id=?')
         .run(newPaid, newDue, newStatus, invoiceId);
-      db.prepare('INSERT INTO payments (invoice_id, amount, payment_method, received_by, notes) VALUES (?, ?, ?, ?, ?)')
-        .run(invoiceId, paid, payment_method, req.user.user_id, 'Sample collection');
+      db.prepare('INSERT INTO payments (invoice_id, amount, payment_method, transaction_no, received_by, notes) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(invoiceId, paid, payment_method, transaction_no, req.user.user_id, 'Sample collection');
       invoiceData = apt
         ? getAppointmentInvoiceData(invoiceId)
         : { ...invoiceData, paid_amount: newPaid, due_amount: newDue, status: newStatus };

@@ -25,6 +25,7 @@ export default function Payments({ pageProps, user, onLogout, onUserUpdate }: Pa
   const [payTarget, setPayTarget] = useState<any | null>(null);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("Cash");
+  const [trxNo, setTrxNo] = useState("");
   const [invoiceData, setInvoiceData] = useState<any | null>(null);
 
   const load = () => {
@@ -52,14 +53,24 @@ export default function Payments({ pageProps, user, onLogout, onUserUpdate }: Pa
   const totalOutstanding = dueList.reduce((s, i) => s + (i.due_amount || 0), 0);
 
   const recordPayment = async () => {
+    if (!amount || Number(amount) <= 0) {
+      alert("Enter a valid amount");
+      return;
+    }
+    if (method !== "Cash" && !trxNo.trim()) {
+      alert("Transaction number (Trx ID) is required for non-cash payments");
+      return;
+    }
     try {
       await api.post(`/billing/invoices/${payTarget.invoice_id}/payments`, {
         amount: Number(amount),
         payment_method: method,
+        transaction_no: method !== "Cash" ? trxNo.trim() : null,
       });
       const invId = payTarget.invoice_id;
       setPayTarget(null);
       setAmount("");
+      setTrxNo("");
       load();
       openInvoice(invId);
     } catch (e: any) {
@@ -169,14 +180,19 @@ export default function Payments({ pageProps, user, onLogout, onUserUpdate }: Pa
             <select
               className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400 bg-white"
               value={method}
-              onChange={(e) => setMethod(e.target.value)}
+              onChange={(e) => { setMethod(e.target.value); setTrxNo(""); }}
             >
               {["Cash", "Card", "Mobile Banking", "Bank Transfer", "Online Payment"].map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
           </Field>
+          {method !== "Cash" && (
+            <Field label="Transaction Number (Trx ID)" required>
+              <Input placeholder="bKash/Card/Online Trx ID" value={trxNo} onChange={setTrxNo} />
+            </Field>
+          )}
         </div>
         <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-slate-100">
-          <Btn variant="secondary" onClick={() => setPayTarget(null)}>Cancel</Btn>
+          <Btn variant="secondary" onClick={() => { setPayTarget(null); setTrxNo(""); }}>Cancel</Btn>
           <Btn onClick={recordPayment}>Record Payment</Btn>
         </div>
       </Modal>

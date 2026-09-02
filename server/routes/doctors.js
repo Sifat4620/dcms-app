@@ -36,8 +36,8 @@ router.get('/patient-stats', (req, res) => {
     const month = String(req.query.month || defaultMonth).slice(0, 7);
     const doctors = db.prepare('SELECT * FROM doctors ORDER BY name').all();
     const rows = doctors.map((d) => {
-      const todayCount = db.prepare("SELECT COUNT(*) c FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND status IN ('Checked-in','Completed')").get(d.doctor_id, date).c;
-      const monthCount = db.prepare("SELECT COUNT(*) c FROM appointments WHERE doctor_id = ? AND substr(appointment_date,1,7) = ? AND status IN ('Checked-in','Completed')").get(d.doctor_id, month).c;
+      const todayCount = db.prepare("SELECT COUNT(*) c FROM appointments WHERE doctor_id = ? AND status IN ('Checked-in','Completed') AND date(updated_at) = ?").get(d.doctor_id, date).c;
+      const monthCount = db.prepare("SELECT COUNT(*) c FROM appointments WHERE doctor_id = ? AND status IN ('Checked-in','Completed') AND substr(date(updated_at),1,7) = ?").get(d.doctor_id, month).c;
       const totalCount = db.prepare("SELECT COUNT(*) c FROM appointments WHERE doctor_id = ? AND status IN ('Checked-in','Completed')").get(d.doctor_id).c;
       return {
         doctor_id: d.doctor_id, name: d.name, specialization: d.specialization, consultation_fee: d.consultation_fee,

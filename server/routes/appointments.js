@@ -97,7 +97,7 @@ router.put('/:id', (req, res) => {
 
 router.post('/:id/payment', (req, res) => {
   try {
-    const { amount, payment_method, notes } = req.body;
+    const { amount, payment_method, transaction_no, notes } = req.body;
     const apt = db.prepare('SELECT * FROM appointments WHERE appointment_id = ?').get(req.params.id);
     if (!apt) return res.status(404).json({ error: 'Appointment not found' });
 
@@ -105,6 +105,8 @@ router.post('/:id/payment', (req, res) => {
     if (payAmount <= 0) return res.status(400).json({ error: 'Enter a valid amount' });
     const aptDue = Number(apt.due_amount) || 0;
     if (payAmount > aptDue) return res.status(400).json({ error: 'Amount exceeds due' });
+    const method = payment_method || 'Cash';
+    if (method !== 'Cash' && !transaction_no) return res.status(400).json({ error: 'Transaction number is required for non-cash payments' });
 
     // Sync appointment paid/due
     const newPaid = (Number(apt.paid_amount) || 0) + payAmount;
@@ -113,13 +115,13 @@ router.post('/:id/payment', (req, res) => {
       .run(newPaid, newDue, req.params.id);
 
     // Record on the appointment_payments table (history)
-    const apResult = db.prepare('INSERT INTO appointment_payments (appointment_id, amount, payment_method, received_by, notes) VALUES (?, ?, ?, ?, ?)')
-      .run(req.params.id, payAmount, payment_method || 'Cash', req.user.user_id, notes);
+    const apResult = db.prepare('INSERT INTO appointment_payments (appointment_id, amount, payment_method, transaction_no, received_by, notes) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(req.params.id, payAmount, method, transaction_no, req.user.user_id, notes);
 
     // Get-or-create the unified appointment invoice and record an invoice payment
     const inv = getOrCreateAppointmentInvoice(apt, req.user.user_id);
-    db.prepare('INSERT INTO payments (invoice_id, amount, payment_method, received_by, notes) VALUES (?, ?, ?, ?, ?)')
-      .run(inv.invoice_id, payAmount, payment_method || 'Cash', req.user.user_id, notes);
+    db.prepare('INSERT INTO payments (invoice_id, amount, payment_method, transaction_no, received_by, notes) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(inv.invoice_id, payAmount, method, transaction_no, req.user.user_id, notes);
     const ipaid = (Number(inv.paid_amount) || 0) + payAmount;
     const idue = Math.max(0, (Number(inv.total_amount) || 0) - ipaid);
     const istatus = idue <= 0 ? 'Paid' : ipaid > 0 ? 'Partial' : 'Unpaid';

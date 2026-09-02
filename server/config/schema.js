@@ -421,6 +421,7 @@ export function initializeDatabase() {
   addCol('appointments', 'fee', 'REAL DEFAULT 0');
   addCol('appointments', 'paid_amount', 'REAL DEFAULT 0');
   addCol('appointments', 'due_amount', 'REAL DEFAULT 0');
+  addCol('appointment_payments', 'transaction_no', 'TEXT');
   addCol('test_orders', 'doctor_id', 'INTEGER REFERENCES doctors(doctor_id)');
   addCol('test_orders', 'appointment_id', 'INTEGER REFERENCES appointments(appointment_id)');
   addCol('patient_visits', 'appointment_id', 'INTEGER REFERENCES appointments(appointment_id)');

@@ -100,8 +100,13 @@ router.post('/invoices/:id/payments', (req, res) => {
     const invoice = db.prepare('SELECT * FROM invoices WHERE invoice_id = ?').get(req.params.id);
     if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
+    const method = payment_method || 'Cash';
+    if (amount == null || Number(amount) <= 0) return res.status(400).json({ error: 'Enter a valid amount' });
+    if (Number(amount) > Number(invoice.due_amount) + 0.001) return res.status(400).json({ error: 'Amount exceeds due' });
+    if (method !== 'Cash' && !transaction_no) return res.status(400).json({ error: 'Transaction number is required for non-cash payments' });
+
     db.prepare('INSERT INTO payments (invoice_id, amount, payment_method, transaction_no, received_by, notes) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(req.params.id, amount, payment_method || 'Cash', transaction_no, req.user.user_id, notes);
+      .run(req.params.id, amount, method, transaction_no, req.user.user_id, notes);
 
     const newPaid = invoice.paid_amount + amount;
     const newDue = invoice.total_amount - newPaid;

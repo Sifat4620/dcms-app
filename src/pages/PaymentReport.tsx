@@ -117,7 +117,7 @@ export default function PaymentReport({ pageProps, user, onLogout, onUserUpdate 
               <input type="date" className="px-3 py-2 text-xs border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-sky-400" value={to} onChange={(e) => setTo(e.target.value)} />
             </div>
           </div>
-          <Table headers={["Date", "Invoice No.", "Patient", "Doctor Fee", "Lab Fee", "Method", "Received By", "Amount"]}>
+          <Table headers={["Date", "Invoice No.", "Patient", "Doctor Fee", "Lab Fee", "Method", "Trx No.", "Received By", "Amount"]}>
             {filtered.map((p) => (
               <TR key={p.payment_id}>
                 <TD mono>{p.payment_date}</TD>
@@ -131,6 +131,7 @@ export default function PaymentReport({ pageProps, user, onLogout, onUserUpdate 
                     {p.payment_method || "Cash"}
                   </span>
                 </TD>
+                <TD mono>{p.transaction_no ? <span className="text-sky-600">{p.transaction_no}</span> : <span className="text-slate-300">—</span>}</TD>
                 <TD>{p.received_by_name || "—"}</TD>
                 <TD mono><span className="font-semibold text-emerald-600">৳ {p.amount.toLocaleString()}</span></TD>
               </TR>

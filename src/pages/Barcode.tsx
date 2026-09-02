@@ -41,6 +41,7 @@ export default function Barcode({ pageProps, user, onLogout, onUserUpdate }: Pag
   const [consultFee, setConsultFee] = useState("");
   const [amountPaid, setAmountPaid] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("Cash");
+  const [trxNo, setTrxNo] = useState("");
   const [collecting, setCollecting] = useState(false);
   const [invoiceData, setInvoiceData] = useState<any | null>(null);
 
@@ -78,12 +79,17 @@ export default function Barcode({ pageProps, user, onLogout, onUserUpdate }: Pag
     setConsultFee("");
     setAmountPaid("");
     setPaymentMethod("Cash");
+    setTrxNo("");
     setShowNew(true);
   };
 
   const handleNewSample = async () => {
     if (!patientId || !testId) {
       alert("Please select a patient and a test");
+      return;
+    }
+    if (paymentMethod !== "Cash" && !trxNo.trim()) {
+      alert("Transaction number (Trx ID) is required for non-cash payments");
       return;
     }
     setCollecting(true);
@@ -96,6 +102,7 @@ export default function Barcode({ pageProps, user, onLogout, onUserUpdate }: Pag
         consultation_fee: Number(consultFee || 0),
         amount_paid: Number(amountPaid || 0),
         payment_method: paymentMethod,
+        transaction_no: paymentMethod !== "Cash" ? trxNo.trim() : null,
       });
       setShowNew(false);
       setSampleType("");
@@ -303,11 +310,16 @@ export default function Barcode({ pageProps, user, onLogout, onUserUpdate }: Pag
             <select
               className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400 bg-white"
               value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value)}
+              onChange={(e) => { setPaymentMethod(e.target.value); setTrxNo(""); }}
             >
               {["Cash", "Card", "Mobile Banking", "Bank Transfer", "Online Payment"].map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
           </Field>
+          {paymentMethod !== "Cash" && (
+            <Field label="Transaction Number (Trx ID)" required>
+              <Input placeholder="bKash/Card/Online Trx ID" value={trxNo} onChange={setTrxNo} />
+            </Field>
+          )}
         </div>
 
         <div className="p-3 rounded-lg bg-slate-50 border border-slate-100 text-xs mt-4">

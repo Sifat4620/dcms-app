@@ -155,6 +155,11 @@ export default function InvoiceModal({
                           <span className="font-medium text-slate-800">{money(p.amount)}</span>
                         </div>
                       ))}
+                      {payments.some((p) => p.transaction_no) && (
+                        <div className="text-[10px] font-mono text-sky-600 mt-1">
+                          {payments.filter((p) => p.transaction_no).map((p) => `Trx: ${p.transaction_no}`).join(" · ")}
+                        </div>
+                      )}
                     </div>
                   )}
                   <div className="text-[11px] text-slate-400 mt-3">Thank you for choosing {branch.branch_name || "our clinic"}.</div>
