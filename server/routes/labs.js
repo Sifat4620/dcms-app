@@ -7,6 +7,15 @@ import { getOrCreateAppointmentInvoice, getAppointmentInvoiceData } from './appo
 const router = Router();
 router.use(authenticateToken);
 
+function ensureDraftReport(orderId) {
+  const existing = db.prepare('SELECT report_id FROM reports WHERE order_id = ?').get(orderId);
+  if (existing) return existing.report_id;
+  const barcode = `RPT-${uuidv4().slice(0, 8).toUpperCase()}`;
+  const result = db.prepare("INSERT INTO reports (order_id, barcode, status, report_date) VALUES (?, ?, 'Draft', datetime('now'))")
+    .run(orderId, barcode);
+  return result.lastInsertRowid;
+}
+
 router.get('/orders', (req, res) => {
   try {
     const { visit_id, status, page = 1, limit = 25 } = req.query;
@@ -144,6 +153,9 @@ router.post('/collect', (req, res) => {
     const orderItemRes = db.prepare('INSERT INTO test_order_items (order_id, test_id, price, discount) VALUES (?, ?, ?, ?)')
       .run(orderId, test_id, testPrice, 0);
     const orderItemId = orderItemRes.lastInsertRowid;
+
+    // Auto-create a Draft report so the order shows up in Lab Report Management
+    ensureDraftReport(orderId);
 
     // 3. Create sample
     const barcode = `BC-${uuidv4().slice(0, 8).toUpperCase()}`;

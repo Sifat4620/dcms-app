@@ -8,10 +8,18 @@ router.use(authenticateToken);
 router.get('/invoices', (req, res) => {
   try {
     const { status, patient_id, page = 1, limit = 25 } = req.query;
-    let query = `SELECT i.*, p.name as patient_name, p.patient_unique_id, p.mobile as patient_mobile
+    let query = `SELECT i.*, p.name as patient_name, p.patient_unique_id, p.mobile as patient_mobile,
+      COALESCE(it.consultation_amt, 0) as doctor_fee, COALESCE(it.test_amt, 0) as lab_fee
       FROM invoices i
       JOIN patient_visits pv ON i.visit_id = pv.visit_id
-      JOIN patients p ON pv.patient_id = p.patient_id WHERE 1=1`;
+      JOIN patients p ON pv.patient_id = p.patient_id
+      LEFT JOIN (
+        SELECT invoice_id,
+          SUM(CASE WHEN item_type='Consultation' THEN amount ELSE 0 END) as consultation_amt,
+          SUM(CASE WHEN item_type='Test' THEN amount ELSE 0 END) as test_amt
+        FROM invoice_items GROUP BY invoice_id
+      ) it ON it.invoice_id = i.invoice_id
+      WHERE 1=1`;
     const params = [];
     if (status) { query += ' AND i.status = ?'; params.push(status); }
     if (patient_id) { query += ' AND pv.patient_id = ?'; params.push(patient_id); }
@@ -115,6 +123,33 @@ router.post('/invoices/:id/payments', (req, res) => {
     const updated = db.prepare('SELECT * FROM invoices WHERE invoice_id = ?').get(req.params.id);
     const payments = db.prepare('SELECT * FROM payments WHERE invoice_id = ?').all(req.params.id);
     res.json({ ...updated, payments });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/payments/report', (req, res) => {
+  try {
+    const { method, from, to } = req.query;
+    let query = `SELECT p.*, i.invoice_no, p2.name as patient_name, u.name as received_by_name,
+      COALESCE(it.consultation_amt, 0) as doctor_fee, COALESCE(it.test_amt, 0) as lab_fee
+      FROM payments p
+      JOIN invoices i ON p.invoice_id = i.invoice_id
+      LEFT JOIN patient_visits pv ON i.visit_id = pv.visit_id
+      LEFT JOIN patients p2 ON pv.patient_id = p2.patient_id
+      LEFT JOIN users u ON p.received_by = u.user_id
+      LEFT JOIN (
+        SELECT invoice_id,
+          SUM(CASE WHEN item_type='Consultation' THEN amount ELSE 0 END) as consultation_amt,
+          SUM(CASE WHEN item_type='Test' THEN amount ELSE 0 END) as test_amt
+        FROM invoice_items GROUP BY invoice_id
+      ) it ON it.invoice_id = i.invoice_id
+      WHERE 1=1`;
+    const params = [];
+    if (method && method !== 'All') { query += ' AND p.payment_method = ?'; params.push(method); }
+    if (from) { query += ' AND date(p.payment_date) >= date(?)'; params.push(from); }
+    if (to) { query += ' AND date(p.payment_date) <= date(?)'; params.push(to); }
+    query += ' ORDER BY p.payment_date DESC';
+    const payments = db.prepare(query).all(...params);
+    res.json(payments);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

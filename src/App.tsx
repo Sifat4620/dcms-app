@@ -12,7 +12,7 @@ import LabTests from "./pages/LabTests";
 import Barcode from "./pages/Barcode";
 import Reports from "./pages/Reports";
 import Billing from "./pages/Billing";
-import Payments from "./pages/Payments";
+import PaymentReport from "./pages/PaymentReport";
 import Inventory from "./pages/Inventory";
 import Employees from "./pages/Employees";
 import Corporate from "./pages/Corporate";
@@ -30,7 +30,7 @@ export interface AppUser {
   phone?: string;
 }
 
-type PageId = "dashboard" | "patients" | "doctors" | "doctorpatients" | "appointments" | "tokens" | "labtests" | "barcode" | "reports" | "billing" | "payments" | "inventory" | "employees" | "corporate" | "notifications" | "analytics" | "settings";
+type PageId = "dashboard" | "patients" | "doctors" | "doctorpatients" | "appointments" | "tokens" | "labtests" | "barcode" | "reports" | "billing" | "paymentreport" | "inventory" | "employees" | "corporate" | "notifications" | "analytics" | "settings";
 
 const PAGE_PROPS: Record<PageId, { title: string; breadcrumb: string[] }> = {
   dashboard:     { title: "Dashboard", breadcrumb: ["Home", "Dashboard"] },
@@ -42,8 +42,8 @@ const PAGE_PROPS: Record<PageId, { title: string; breadcrumb: string[] }> = {
   labtests:      { title: "Laboratory Test Management", breadcrumb: ["Home", "Laboratory", "Tests"] },
   barcode:       { title: "Barcode & Sample Management", breadcrumb: ["Home", "Laboratory", "Samples"] },
   reports:       { title: "Lab Report Management", breadcrumb: ["Home", "Laboratory", "Reports"] },
-  billing:       { title: "Billing & Invoice Management", breadcrumb: ["Home", "Finance", "Billing"] },
-  payments:      { title: "Payments & Due Management", breadcrumb: ["Home", "Finance", "Payments"] },
+  billing:       { title: "Billing Management", breadcrumb: ["Home", "Finance", "Billing"] },
+  paymentreport: { title: "Payment Report", breadcrumb: ["Home", "Finance", "Payment Report"] },
   inventory:     { title: "Inventory & Supplier Management", breadcrumb: ["Home", "Operations", "Inventory"] },
   employees:     { title: "Employee Management", breadcrumb: ["Home", "Operations", "Employees"] },
   corporate:     { title: "Corporate & Institutional Clients", breadcrumb: ["Home", "Operations", "Corporate"] },
@@ -70,7 +70,7 @@ const PAGES: Record<PageId, PageComponent> = {
   barcode:       (p) => <Barcode {...p} />,
   reports:       (p) => <Reports {...p} />,
   billing:       (p) => <Billing {...p} />,
-  payments:      (p) => <Payments {...p} />,
+  paymentreport: (p) => <PaymentReport {...p} />,
   inventory:     (p) => <Inventory {...p} />,
   employees:     (p) => <Employees {...p} />,
   corporate:     (p) => <Corporate {...p} />,
