@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Layout, { Card, Badge, Btn, SearchBar, Table, TR, TD, Modal, Field } from "../components/Layout";
+import InvoiceModal, { openInvoiceFor } from "../components/InvoiceModal";
 import { api } from "../data/api";
 
 interface PageProps {
@@ -22,6 +23,20 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
   const [invoices, setInvoices] = useState<any[]>([]);
   const [items, setItems] = useState<any[]>([]);
   const [form, setForm] = useState<Record<string, any>>({});
+  const [viewInvoice, setViewInvoice] = useState<any | null>(null);
+  const [loadingView, setLoadingView] = useState(false);
+
+  const viewInvoiceDetail = async (id: number) => {
+    setLoadingView(true);
+    try {
+      const data = await openInvoiceFor(id);
+      setViewInvoice(data);
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setLoadingView(false);
+    }
+  };
 
   const load = () => {
     api.get<any>("/billing/invoices?limit=200").then((res) => setInvoices(res.data)).catch(() => {});
@@ -135,7 +150,7 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
                   {inv.due_amount > 0 ? <span className="text-red-500 font-medium">৳ {inv.due_amount.toLocaleString()}</span> : <span className="text-slate-400">—</span>}
                 </TD>
                 <TD><Badge label={inv.status} color={STATUS_COLOR[inv.status] || "gray"} /></TD>
-                <TD><Btn size="xs" variant="secondary">View</Btn></TD>
+                <TD><Btn size="xs" variant="secondary" onClick={() => viewInvoiceDetail(inv.invoice_id)}>{loadingView ? "..." : "View / Print"}</Btn></TD>
               </TR>
             ))}
             {filtered.length === 0 && (
@@ -197,6 +212,8 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
           <Btn onClick={createInvoice}>Generate Invoice</Btn>
         </div>
       </Modal>
+
+      <InvoiceModal invoice={viewInvoice} open={!!viewInvoice} onClose={() => setViewInvoice(null)} />
     </Layout>
   );
 }

@@ -59,6 +59,7 @@ export function initializeDatabase() {
       visit_id INTEGER PRIMARY KEY AUTOINCREMENT,
       patient_id INTEGER NOT NULL REFERENCES patients(patient_id),
       branch_id INTEGER REFERENCES branches(branch_id),
+      appointment_id INTEGER REFERENCES appointments(appointment_id),
       visit_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       visit_type TEXT DEFAULT 'OPD' CHECK(visit_type IN ('OPD','Lab Test','Other')),
       referred_by TEXT,
@@ -106,6 +107,9 @@ export function initializeDatabase() {
       appointment_date TEXT NOT NULL,
       appointment_time TEXT NOT NULL,
       token_no INTEGER,
+      fee REAL DEFAULT 0,
+      paid_amount REAL DEFAULT 0,
+      due_amount REAL DEFAULT 0,
       status TEXT DEFAULT 'Pending' CHECK(status IN ('Pending','Confirmed','Checked-in','Completed','Cancelled','No Show')),
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -188,6 +192,8 @@ export function initializeDatabase() {
     CREATE TABLE IF NOT EXISTS test_orders (
       order_id INTEGER PRIMARY KEY AUTOINCREMENT,
       visit_id INTEGER NOT NULL REFERENCES patient_visits(visit_id),
+      doctor_id INTEGER REFERENCES doctors(doctor_id),
+      appointment_id INTEGER REFERENCES appointments(appointment_id),
       order_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       discount REAL DEFAULT 0,
       total_amount REAL DEFAULT 0,
@@ -281,6 +287,16 @@ export function initializeDatabase() {
       amount REAL NOT NULL,
       payment_method TEXT DEFAULT 'Cash' CHECK(payment_method IN ('Cash','Card','Mobile Banking','Bank Transfer','Online Payment')),
       transaction_no TEXT,
+      received_by INTEGER REFERENCES users(user_id),
+      notes TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS appointment_payments (
+      payment_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      appointment_id INTEGER NOT NULL REFERENCES appointments(appointment_id),
+      payment_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      amount REAL NOT NULL,
+      payment_method TEXT DEFAULT 'Cash',
       received_by INTEGER REFERENCES users(user_id),
       notes TEXT
     );
@@ -391,4 +407,21 @@ export function initializeDatabase() {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // ---- Migrations for existing databases ----
+  const hasCol = (table, col) =>
+    db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col);
+
+  const addCol = (table, col, def) => {
+    if (!hasCol(table, col)) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+    }
+  };
+
+  addCol('appointments', 'fee', 'REAL DEFAULT 0');
+  addCol('appointments', 'paid_amount', 'REAL DEFAULT 0');
+  addCol('appointments', 'due_amount', 'REAL DEFAULT 0');
+  addCol('test_orders', 'doctor_id', 'INTEGER REFERENCES doctors(doctor_id)');
+  addCol('test_orders', 'appointment_id', 'INTEGER REFERENCES appointments(appointment_id)');
+  addCol('patient_visits', 'appointment_id', 'INTEGER REFERENCES appointments(appointment_id)');
 }

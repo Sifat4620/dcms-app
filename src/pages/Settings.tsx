@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import Layout, { Card, Btn, Badge } from "../components/Layout";
+import Layout, { Card, Btn, Badge, Field } from "../components/Layout";
 import { api } from "../data/api";
-
 interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
   user: { name: string; role: string; email: string };
@@ -28,10 +27,44 @@ const MAX_PERMISSIONS = 42;
 export default function Settings({ pageProps, user, onLogout, onUserUpdate }: PageProps) {
   const [tab, setTab] = useState("Branch");
   const [users, setUsers] = useState<any[]>([]);
+  const [branch, setBranch] = useState<any>(null);
+  const [branchForm, setBranchForm] = useState({ branch_name: "", code: "", address: "", phone: "", email: "" });
+  const [logo, setLogo] = useState<string | null>(null);
+  const [branchMsg, setBranchMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [branchSaving, setBranchSaving] = useState(false);
 
   useEffect(() => {
     api.get<any>("/admin/users").then(setUsers).catch(() => {});
+    api.get<any>("/admin/branches").then((bs) => {
+      const b = Array.isArray(bs) ? bs[0] : null;
+      if (b) {
+        setBranch(b);
+        setLogo(b.logo || null);
+        setBranchForm({ branch_name: b.branch_name, code: b.code, address: b.address || "", phone: b.phone || "", email: b.email || "" });
+      }
+    }).catch(() => {});
   }, []);
+
+  const onLogoFile = (file: File) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setLogo(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const saveBranch = async () => {
+    setBranchSaving(true);
+    setBranchMsg(null);
+    try {
+      const saved = await api.put<any>(`/admin/branches/${branch.branch_id}`, { ...branchForm, logo });
+      setBranch(saved);
+      setBranchMsg({ type: "success", text: "Branch info saved. Logo will appear on invoices." });
+    } catch (e: any) {
+      setBranchMsg({ type: "error", text: e.message });
+    } finally {
+      setBranchSaving(false);
+    }
+  };
 
   return (
     <Layout
@@ -61,22 +94,44 @@ export default function Settings({ pageProps, user, onLogout, onUserUpdate }: Pa
             <Card className="p-4">
               <h3 className="text-xs font-semibold text-slate-800 mb-4">Branch Information</h3>
               <div className="space-y-3">
-                {[
-                  { label: "Branch Name", value: "MediCare Diagnostic Center - Dhaka Main" },
-                  { label: "Branch Code", value: "MCB-001" },
-                  { label: "Address", value: "123 Hospital Road, Dhaka-1205, Bangladesh" },
-                  { label: "Phone", value: "+88-02-9XXXXXX" },
-                  { label: "Email", value: "dhaka@medicare.com" },
-                ].map((f) => (
-                  <div key={f.label}>
-                    <label className="block text-[11px] font-medium text-slate-500 mb-1">{f.label}</label>
-                    <input
-                      defaultValue={f.value}
-                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400"
-                    />
+                <Field label="Invoice Logo" >
+                  <div className="flex items-center gap-3">
+                    <div className="w-16 h-16 rounded-xl border border-slate-200 bg-white flex items-center justify-center overflow-hidden flex-shrink-0">
+                      {logo ? (
+                        <img src={logo} alt="logo" className="w-full h-full object-contain" />
+                      ) : (
+                        <span className="text-[10px] text-slate-400">No logo</span>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <input
+                        type="file" accept="image/*"
+                        className="block w-full text-[11px] text-slate-500 file:mr-2 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:bg-sky-50 file:text-sky-700 file:text-xs file:font-semibold hover:file:bg-sky-100"
+                        onChange={(e) => e.target.files?.[0] && onLogoFile(e.target.files[0])}
+                      />
+                      <div className="text-[10px] text-slate-400 mt-1">This logo appears on printed invoices.</div>
+                    </div>
                   </div>
-                ))}
-                <Btn>Save Branch Info</Btn>
+                </Field>
+                <Field label="Branch Name">
+                  <input className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400" value={branchForm.branch_name} onChange={(e) => setBranchForm({ ...branchForm, branch_name: e.target.value })} />
+                </Field>
+                <Field label="Branch Code">
+                  <input className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400" value={branchForm.code} onChange={(e) => setBranchForm({ ...branchForm, code: e.target.value })} />
+                </Field>
+                <Field label="Address">
+                  <input className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400" value={branchForm.address} onChange={(e) => setBranchForm({ ...branchForm, address: e.target.value })} />
+                </Field>
+                <Field label="Phone">
+                  <input className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400" value={branchForm.phone} onChange={(e) => setBranchForm({ ...branchForm, phone: e.target.value })} />
+                </Field>
+                <Field label="Email">
+                  <input className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400" value={branchForm.email} onChange={(e) => setBranchForm({ ...branchForm, email: e.target.value })} />
+                </Field>
+                {branchMsg && (
+                  <div className={`text-xs px-3 py-2 rounded-lg ${branchMsg.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>{branchMsg.text}</div>
+                )}
+                <Btn onClick={saveBranch} disabled={branchSaving}>{branchSaving ? "Saving..." : "Save Branch Info"}</Btn>
               </div>
             </Card>
 

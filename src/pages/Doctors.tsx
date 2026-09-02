@@ -11,6 +11,15 @@ interface PageProps {
 
 const AVAIL_COLORS = ["#10B981", "#F59E0B", "#EF4444", "#10B981", "#10B981"];
 
+const STATUS_COLOR: Record<string, "green" | "blue" | "yellow" | "red" | "gray" | "purple" | "orange"> = {
+  Confirmed: "blue",
+  "Checked-in": "green",
+  Completed: "gray",
+  Cancelled: "red",
+  "No Show": "red",
+  Pending: "yellow",
+};
+
 export default function Doctors({ pageProps, user, onLogout, onUserUpdate }: PageProps) {
   const [search, setSearch] = useState("");
   const [view, setView] = useState<"table" | "cards">("table");
@@ -18,6 +27,55 @@ export default function Doctors({ pageProps, user, onLogout, onUserUpdate }: Pag
   const [doctors, setDoctors] = useState<any[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ name: "", specialization: "", degree: "", bmdc_no: "", phone: "", email: "", consultation_fee: "0" });
+  const [profile, setProfile] = useState<any | null>(null);
+  const [tests, setTests] = useState<any[]>([]);
+  const [prescribeTo, setPrescribeTo] = useState<any | null>(null);
+  const [selectedTests, setSelectedTests] = useState<number[]>([]);
+  const [prescribeSaving, setPrescribeSaving] = useState(false);
+  const [prescribeMsg, setPrescribeMsg] = useState<string | null>(null);
+
+  const openProfile = async (id: number) => {
+    try {
+      const data = await api.get<any>(`/doctors/${id}`);
+      setProfile(data);
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
+
+  const openPrescribe = async (apt: any) => {
+    setPrescribeTo(apt);
+    setSelectedTests([]);
+    setPrescribeMsg(null);
+    if (tests.length === 0) {
+      api.get<any>("/tests?limit=200").then((res) => setTests(res.data.data || [])).catch(() => {});
+    }
+  };
+
+  const toggleTest = (id: number) => {
+    setSelectedTests((prev) => prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]);
+  };
+
+  const submitPrescribe = async () => {
+    if (selectedTests.length === 0) { setPrescribeMsg("Select at least one test"); return; }
+    const items = tests.filter((t) => selectedTests.includes(t.test_id)).map((t) => ({ test_id: t.test_id, price: Number(t.price) || 0 }));
+    setPrescribeSaving(true);
+    setPrescribeMsg(null);
+    try {
+      await api.post("/labs/orders", {
+        appointment_id: prescribeTo.appointment_id,
+        patient_id: prescribeTo.patient_id,
+        doctor_id: prescribeTo.doctor_id,
+        items,
+      });
+      setPrescribeMsg("Lab tests assigned. Patient can collect in the Lab section.");
+      setTimeout(() => { setPrescribeTo(null); openProfile(prescribeTo.doctor_id); }, 1200);
+    } catch (e: any) {
+      setPrescribeMsg(e.message);
+    } finally {
+      setPrescribeSaving(false);
+    }
+  };
 
   const loadData = () => {
     api.get<any>("/doctors?limit=100").then((res) => setDoctors(res.data)).catch(() => {});
@@ -103,7 +161,7 @@ export default function Doctors({ pageProps, user, onLogout, onUserUpdate }: Pag
                   <TD><Badge label={d.status} color={d.status === "active" ? "green" : "gray"} /></TD>
                   <TD>
                     <div className="flex gap-1">
-                      <Btn size="xs" variant="secondary">Profile</Btn>
+                      <Btn size="xs" variant="secondary" onClick={() => openProfile(d.doctor_id)}>Profile</Btn>
                     </div>
                   </TD>
                 </TR>
@@ -172,6 +230,113 @@ export default function Doctors({ pageProps, user, onLogout, onUserUpdate }: Pag
           <Btn variant="secondary" onClick={() => setShowAdd(false)}>Cancel</Btn>
           <Btn onClick={handleAdd} disabled={loading}>{loading ? "Saving..." : "Add Doctor"}</Btn>
         </div>
+      </Modal>
+
+      {/* Doctor profile */}
+      <Modal open={!!profile} onClose={() => setProfile(null)} title="Doctor Profile" width="max-w-3xl">
+        {profile && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700 text-lg font-bold">
+                {(profile.name || "").replace("Dr. ", "").split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
+              </div>
+              <div className="flex-1">
+                <div className="text-sm font-bold text-slate-900">{profile.name}</div>
+                <div className="text-xs text-slate-500">{profile.specialization}</div>
+                <div className="text-[11px] text-slate-400">{profile.degree} · BMDC {profile.bmdc_no || "—"}</div>
+              </div>
+              <div className="text-right text-[11px]">
+                <div className="text-slate-400">Consultation Fee</div>
+                <div className="text-base font-bold text-slate-900">৳ {profile.consultation_fee}</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: "Total Appointments", value: profile.stats?.totalAppointments || 0 },
+                { label: "Patients Seen", value: profile.stats?.patientsSeen || 0 },
+                { label: "Today's Appointments", value: profile.stats?.todayAppointments || 0 },
+              ].map((s) => (
+                <div key={s.label} className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
+                  <div className="text-xl font-bold text-slate-900">{s.value}</div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-semibold text-slate-700">Patients Under This Doctor</h4>
+              </div>
+              <div className="rounded-lg border border-slate-200 overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 text-left text-[11px] text-slate-500">
+                      {["Patient", "Date", "Fee", "Status", ""].map((h) => <th key={h} className="px-3 py-2 font-semibold">{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(profile.patients || []).map((pt: any) => (
+                      <tr key={pt.appointment_id} className="border-t border-slate-100">
+                        <td className="px-3 py-2">
+                          <div className="font-medium text-slate-800">{pt.patient_name}</div>
+                          <div className="text-[10px] font-mono text-slate-400">{pt.patient_unique_id}</div>
+                        </td>
+                        <td className="px-3 py-2 text-slate-600">{pt.appointment_date}</td>
+                        <td className="px-3 py-2">
+                          <div className={pt.due_amount > 0 ? "text-red-500" : "text-emerald-600"}>
+                            ৳ {pt.paid_amount || 0}/{pt.fee || 0}
+                            {pt.due_amount > 0 && <div className="text-[10px]">due ৳ {pt.due_amount}</div>}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2"><Badge label={pt.status} color={STATUS_COLOR[pt.status] || "gray"} /></td>
+                        <td className="px-3 py-2">
+                          <Btn size="xs" variant="primary" onClick={() => openPrescribe(pt)}>Assign Lab Tests</Btn>
+                        </td>
+                      </tr>
+                    ))}
+                    {(profile.patients || []).length === 0 && (
+                      <tr><td className="px-3 py-6 text-center text-slate-400" colSpan={5}>No patients assigned yet</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Assign lab tests (prescription) */}
+      <Modal open={!!prescribeTo} onClose={() => setPrescribeTo(null)} title="Assign Lab Tests" width="max-w-lg">
+        {prescribeTo && (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs">
+              <div className="text-slate-500">Patient: <span className="font-medium text-slate-800">{prescribeTo.patient_name}</span></div>
+              <div className="text-slate-500 mt-0.5">ID: <span className="font-mono text-slate-700">{prescribeTo.patient_unique_id}</span></div>
+            </div>
+            <Field label="Select Tests to Prescribe" required>
+              <div className="border border-slate-200 rounded-lg max-h-56 overflow-auto divide-y divide-slate-50">
+                {tests.map((t) => (
+                  <label key={t.test_id} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50">
+                    <input type="checkbox" checked={selectedTests.includes(t.test_id)} onChange={() => toggleTest(t.test_id)} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs text-slate-800 truncate">{t.test_name}</div>
+                      <div className="text-[10px] text-slate-400">{t.category_name || "General"} · ৳ {t.price}</div>
+                    </div>
+                  </label>
+                ))}
+                {tests.length === 0 && <div className="py-4 text-center text-xs text-slate-400">Loading tests...</div>}
+              </div>
+            </Field>
+            {prescribeMsg && (
+              <div className={`text-xs px-3 py-2 rounded-lg ${prescribeMsg.includes("assigned") ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>{prescribeMsg}</div>
+            )}
+            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+              <Btn variant="secondary" onClick={() => setPrescribeTo(null)}>Cancel</Btn>
+              <Btn onClick={submitPrescribe} disabled={prescribeSaving}>{prescribeSaving ? "Assigning..." : "Assign & Send to Lab"}</Btn>
+            </div>
+          </div>
+        )}
       </Modal>
     </Layout>
   );

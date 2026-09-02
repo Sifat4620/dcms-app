@@ -52,11 +52,16 @@ router.post('/', (req, res) => {
   try {
     const { branch_id, patient_id, doctor_id, appointment_date, appointment_time, status } = req.body;
 
+    const doctor = db.prepare('SELECT consultation_fee FROM doctors WHERE doctor_id = ?').get(doctor_id);
+    const fee = Number(req.body.fee != null ? req.body.fee : (doctor?.consultation_fee || 0));
+    const paid = Number(req.body.paid_amount || 0);
+    const due = fee - paid;
+
     const lastToken = db.prepare('SELECT MAX(token_no) as max_token FROM appointments WHERE appointment_date = ? AND doctor_id = ?').get(appointment_date, doctor_id);
     const token_no = (lastToken?.max_token || 0) + 1;
 
-    const result = db.prepare('INSERT INTO appointments (branch_id, patient_id, doctor_id, appointment_date, appointment_time, token_no, status) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(branch_id, patient_id, doctor_id, appointment_date, appointment_time, token_no, status || 'Pending');
+    const result = db.prepare('INSERT INTO appointments (branch_id, patient_id, doctor_id, appointment_date, appointment_time, token_no, fee, paid_amount, due_amount, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(branch_id, patient_id, doctor_id, appointment_date, appointment_time, token_no, fee, paid, due, status || 'Pending');
 
     const apt = db.prepare('SELECT * FROM appointments WHERE appointment_id = ?').get(result.lastInsertRowid);
     res.json(apt);
@@ -76,6 +81,39 @@ router.put('/:id', (req, res) => {
     }
     const apt = db.prepare('SELECT * FROM appointments WHERE appointment_id = ?').get(req.params.id);
     res.json(apt);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/:id/payment', (req, res) => {
+  try {
+    const { amount, payment_method, notes } = req.body;
+    const apt = db.prepare('SELECT * FROM appointments WHERE appointment_id = ?').get(req.params.id);
+    if (!apt) return res.status(404).json({ error: 'Appointment not found' });
+
+    const payAmount = Number(amount) || 0;
+    const newPaid = (Number(apt.paid_amount) || 0) + payAmount;
+    const newDue = Math.max(0, (Number(apt.fee) || 0) - newPaid);
+
+    const result = db.prepare('INSERT INTO appointment_payments (appointment_id, amount, payment_method, received_by, notes) VALUES (?, ?, ?, ?, ?)')
+      .run(req.params.id, payAmount, payment_method || 'Cash', req.user.user_id, notes);
+
+    db.prepare('UPDATE appointments SET paid_amount=?, due_amount=? WHERE appointment_id=?')
+      .run(newPaid, newDue, req.params.id);
+
+    const updated = db.prepare('SELECT * FROM appointments WHERE appointment_id = ?').get(req.params.id);
+    const payment = db.prepare('SELECT * FROM appointment_payments WHERE payment_id = ?').get(result.lastInsertRowid);
+    res.json({ payment, appointment: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/:id/payments', (req, res) => {
+  try {
+    const payments = db.prepare('SELECT ap.*, u.name as received_by_name FROM appointment_payments ap LEFT JOIN users u ON ap.received_by = u.user_id WHERE ap.appointment_id = ? ORDER BY ap.payment_date DESC').all(req.params.id);
+    res.json(payments);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

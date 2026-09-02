@@ -34,7 +34,22 @@ router.get('/:id', (req, res) => {
     if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
 
     const schedule = db.prepare('SELECT * FROM doctor_schedule WHERE doctor_id = ?').all(req.params.id);
-    res.json({ ...doctor, schedule });
+
+    const patients = db.prepare(`SELECT a.appointment_id, a.appointment_date, a.appointment_time, a.token_no, a.status,
+        a.fee, a.paid_amount, a.due_amount,
+        p.patient_id, p.name as patient_name, p.patient_unique_id, p.mobile as patient_mobile
+      FROM appointments a
+      JOIN patients p ON a.patient_id = p.patient_id
+      WHERE a.doctor_id = ? AND a.status IN ('Confirmed','Checked-in','Completed')
+      ORDER BY a.appointment_date DESC, a.appointment_time DESC`).all(req.params.id);
+
+    const stats = {
+      totalAppointments: db.prepare('SELECT COUNT(*) c FROM appointments WHERE doctor_id = ?').get(req.params.id).c,
+      patientsSeen: db.prepare("SELECT COUNT(*) c FROM appointments WHERE doctor_id = ? AND status IN ('Checked-in','Completed')").get(req.params.id).c,
+      todayAppointments: db.prepare('SELECT COUNT(*) c FROM appointments WHERE doctor_id = ? AND appointment_date = ?').get(req.params.id, new Date().toISOString().split('T')[0]).c,
+    };
+
+    res.json({ ...doctor, schedule, patients, stats });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

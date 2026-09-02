@@ -40,9 +40,20 @@ router.post('/branches', (req, res) => {
 
 router.put('/branches/:id', (req, res) => {
   try {
-    const { branch_name, code, address, phone, email, status } = req.body;
-    db.prepare('UPDATE branches SET branch_name=?, code=?, address=?, phone=?, email=?, status=?, updated_at=CURRENT_TIMESTAMP WHERE branch_id=?')
-      .run(branch_name, code, address, phone, email, status, req.params.id);
+    const { branch_name, code, address, phone, email, status, logo } = req.body;
+    const has = (v) => v !== undefined;
+    const sets = [];
+    const params = [];
+    if (has(branch_name)) { sets.push('branch_name=?'); params.push(branch_name ?? null); }
+    if (has(code)) { sets.push('code=?'); params.push(code ?? null); }
+    if (has(address)) { sets.push('address=?'); params.push(address ?? null); }
+    if (has(phone)) { sets.push('phone=?'); params.push(phone ?? null); }
+    if (has(email)) { sets.push('email=?'); params.push(email ?? null); }
+    if (has(status)) { sets.push('status=?'); params.push(status ?? null); }
+    if (has(logo)) { sets.push('logo=?'); params.push(logo ?? null); }
+    sets.push('updated_at=CURRENT_TIMESTAMP');
+    params.push(req.params.id);
+    db.prepare(`UPDATE branches SET ${sets.join(', ')} WHERE branch_id=?`).run(...params);
     const branch = db.prepare('SELECT * FROM branches WHERE branch_id = ?').get(req.params.id);
     res.json(branch);
   } catch (err) { res.status(500).json({ error: err.message }); }

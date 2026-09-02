@@ -39,7 +39,11 @@ router.get('/invoices/:id', (req, res) => {
     const items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id = ?').all(req.params.id);
     const payments = db.prepare('SELECT * FROM payments WHERE invoice_id = ? ORDER BY payment_date DESC').all(req.params.id);
 
-    res.json({ ...invoice, items, payments });
+    const visit = db.prepare('SELECT branch_id FROM patient_visits WHERE visit_id = ?').get(invoice.visit_id);
+    let branch = db.prepare('SELECT * FROM branches WHERE branch_id = ?').get(visit.branch_id);
+    if (!branch) branch = db.prepare('SELECT * FROM branches ORDER BY branch_id LIMIT 1').get() || {};
+
+    res.json({ ...invoice, items, payments, branch });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

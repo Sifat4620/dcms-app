@@ -37,6 +37,11 @@ export default function Appointments({ pageProps, user, onLogout, onUserUpdate }
   const [doctors, setDoctors] = useState<any[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ patient_id: "", doctor_id: "", appointment_date: "", appointment_time: "" });
+  const [payTarget, setPayTarget] = useState<any | null>(null);
+  const [payAmount, setPayAmount] = useState("");
+  const [payMethod, setPayMethod] = useState("Cash");
+  const [payError, setPayError] = useState<string | null>(null);
+  const [savingPay, setSavingPay] = useState(false);
 
   const loadData = () => {
     api.get<any>("/appointments?limit=100").then((res) => setAppointments(res.data)).catch(() => {});
@@ -78,6 +83,30 @@ export default function Appointments({ pageProps, user, onLogout, onUserUpdate }
       loadData();
     } catch (e: any) {
       alert(e.message);
+    }
+  };
+
+  const openPay = (a: any) => {
+    setPayTarget(a);
+    setPayAmount(String(a.due_amount || ""));
+    setPayMethod("Cash");
+    setPayError(null);
+  };
+
+  const submitPay = async () => {
+    const amt = Number(payAmount);
+    if (!amt || amt <= 0) { setPayError("Enter a valid amount"); return; }
+    if (amt > (payTarget.due_amount || 0)) { setPayError("Amount exceeds due"); return; }
+    setSavingPay(true);
+    setPayError(null);
+    try {
+      await api.post(`/appointments/${payTarget.appointment_id}/payment`, { amount: amt, payment_method: payMethod });
+      setPayTarget(null);
+      loadData();
+    } catch (e: any) {
+      setPayError(e.message);
+    } finally {
+      setSavingPay(false);
     }
   };
 
@@ -137,7 +166,7 @@ export default function Appointments({ pageProps, user, onLogout, onUserUpdate }
         </div>
 
         <Card>
-          <Table headers={["Appt. ID", "Patient", "Doctor", "Date", "Time", "Token", "Status", "Actions"]}>
+          <Table headers={["Appt. ID", "Patient", "Doctor", "Date", "Time", "Fee", "Status", "Actions"]}>
             {filtered.map((a) => (
               <TR key={a.appointment_id}>
                 <TD mono>APT-{a.appointment_id}</TD>
@@ -150,9 +179,16 @@ export default function Appointments({ pageProps, user, onLogout, onUserUpdate }
                 <TD mono>{a.appointment_date}</TD>
                 <TD mono>{a.appointment_time}</TD>
                 <TD>
-                  <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded text-slate-700">
-                    #{a.token_no}
-                  </span>
+                  <div className="font-mono text-xs">
+                    <div className="text-slate-700">৳ {a.fee || 0}</div>
+                    {Number(a.due_amount) > 0 ? (
+                      <div className="text-red-500 text-[10px]">Due ৳ {a.due_amount}</div>
+                    ) : a.paid_amount > 0 ? (
+                      <div className="text-emerald-600 text-[10px]">Paid</div>
+                    ) : (
+                      <div className="text-slate-400 text-[10px]">Unpaid</div>
+                    )}
+                  </div>
                 </TD>
                 <TD>
                   <div className="flex items-center gap-1.5">
@@ -165,9 +201,12 @@ export default function Appointments({ pageProps, user, onLogout, onUserUpdate }
                 </TD>
                 <TD>
                   <div className="flex gap-1">
-                    {a.status === "Pending" && <Btn size="xs" variant="primary" onClick={() => updateStatus(a.appointment_id, "Confirmed")}>Confirm</Btn>}
-                    {a.status === "Confirmed" && <Btn size="xs" variant="primary" onClick={() => updateStatus(a.appointment_id, "Checked-in")}>Check-in</Btn>}
-                    {a.status === "Checked-in" && <Btn size="xs" variant="primary" onClick={() => updateStatus(a.appointment_id, "Completed")}>Complete</Btn>}
+                    {Number(a.due_amount) > 0 && (
+                      <Btn size="xs" variant="primary" onClick={() => openPay(a)}>Collect Fee</Btn>
+                    )}
+                    {a.status === "Pending" && <Btn size="xs" variant="secondary" onClick={() => updateStatus(a.appointment_id, "Confirmed")}>Confirm</Btn>}
+                    {a.status === "Confirmed" && <Btn size="xs" variant="secondary" onClick={() => updateStatus(a.appointment_id, "Checked-in")}>Check-in</Btn>}
+                    {a.status === "Checked-in" && <Btn size="xs" variant="secondary" onClick={() => updateStatus(a.appointment_id, "Completed")}>Complete</Btn>}
                     {["Pending", "Confirmed"].includes(a.status) && (
                       <Btn size="xs" variant="danger" onClick={() => updateStatus(a.appointment_id, "Cancelled")}>Cancel</Btn>
                     )}
@@ -215,6 +254,36 @@ export default function Appointments({ pageProps, user, onLogout, onUserUpdate }
           <Btn variant="secondary" onClick={() => setShowAdd(false)}>Cancel</Btn>
           <Btn onClick={handleAdd}>Book Appointment</Btn>
         </div>
+      </Modal>
+
+      {/* Collect consultation fee */}
+      <Modal open={!!payTarget} onClose={() => setPayTarget(null)} title="Collect Consultation Fee">
+        {payTarget && (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs">
+              <div className="flex justify-between"><span className="text-slate-500">Patient</span><span className="font-medium text-slate-800">{payTarget.patient_name}</span></div>
+              <div className="flex justify-between mt-1"><span className="text-slate-500">Doctor</span><span className="font-medium text-slate-800">{payTarget.doctor_name}</span></div>
+              <div className="flex justify-between mt-1"><span className="text-slate-500">Fee</span><span className="font-semibold text-slate-800">৳ {payTarget.fee}</span></div>
+              <div className="flex justify-between mt-1"><span className="text-slate-500">Already Paid</span><span className="text-emerald-600">৳ {payTarget.paid_amount || 0}</span></div>
+              <div className="flex justify-between mt-1"><span className="text-slate-500">Due</span><span className="text-red-500 font-semibold">৳ {payTarget.due_amount}</span></div>
+            </div>
+            <div className="grid grid-cols-1 gap-3">
+              <Field label="Amount" required>
+                <Input type="number" value={payAmount} onChange={setPayAmount} />
+              </Field>
+              <Field label="Payment Method" required>
+                <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)} className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white">
+                  {["Cash", "Card", "Mobile Banking", "Bank Transfer", "Online Payment"].map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </Field>
+            </div>
+            {payError && <div className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{payError}</div>}
+            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+              <Btn variant="secondary" onClick={() => setPayTarget(null)}>Cancel</Btn>
+              <Btn onClick={submitPay} disabled={savingPay}>{savingPay ? "Saving..." : "Confirm Payment"}</Btn>
+            </div>
+          </div>
+        )}
       </Modal>
     </Layout>
   );

@@ -40,10 +40,25 @@ router.get('/orders/:id', (req, res) => {
 
 router.post('/orders', (req, res) => {
   try {
-    const { visit_id, items, discount } = req.body;
+    let { visit_id, items, discount, doctor_id, appointment_id, patient_id } = req.body;
+
+    // If no visit given but we have an appointment, resolve patient and create a visit
+    if (!visit_id) {
+      let pid = patient_id;
+      if (!pid && appointment_id) {
+        const apt = db.prepare('SELECT patient_id FROM appointments WHERE appointment_id = ?').get(appointment_id);
+        pid = apt?.patient_id;
+      }
+      if (!pid) return res.status(400).json({ error: 'visit_id or patient_id/appointment_id required' });
+      const branch = db.prepare('SELECT branch_id FROM appointments WHERE appointment_id = ?').get(appointment_id);
+      const visitResult = db.prepare('INSERT INTO patient_visits (patient_id, branch_id, appointment_id, visit_type, referred_by) VALUES (?, ?, ?, ?, ?)')
+        .run(pid, branch?.branch_id || 1, appointment_id || null, 'Lab Test', null);
+      visit_id = visitResult.lastInsertRowid;
+    }
+
     const total = items.reduce((sum, item) => sum + (item.price - (item.discount || 0)), 0);
-    const result = db.prepare('INSERT INTO test_orders (visit_id, discount, total_amount) VALUES (?, ?, ?)')
-      .run(visit_id, discount || 0, total);
+    const result = db.prepare('INSERT INTO test_orders (visit_id, doctor_id, appointment_id, discount, total_amount) VALUES (?, ?, ?, ?, ?)')
+      .run(visit_id, doctor_id || null, appointment_id || null, discount || 0, total);
     const orderId = result.lastInsertRowid;
 
     const stmt = db.prepare('INSERT INTO test_order_items (order_id, test_id, price, discount) VALUES (?, ?, ?, ?)');
