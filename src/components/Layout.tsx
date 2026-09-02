@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { api } from "../data/api";
 
 /* ─── Icon helper ─────────────────────────────── */
 export function Icon({ d, className = "w-4 h-4" }: { d: string; className?: string }) {
@@ -265,13 +266,72 @@ interface HeaderProps {
   subtitle?: string;
   breadcrumb?: string[];
   actions?: React.ReactNode;
-  user?: { name: string; role: string };
+  user?: { name: string; role: string; email?: string; phone?: string; user_id?: number };
   onLogout?: () => void;
+  onUserUpdate?: (user: { name: string; role?: string; email?: string; phone?: string; user_id?: number }) => void;
 }
 
-export function Header({ title, subtitle, breadcrumb, actions, user, onLogout }: HeaderProps) {
+export function Header({ title, subtitle, breadcrumb, actions, user, onLogout, onUserUpdate }: HeaderProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [profileName, setProfileName] = useState(user?.name || "");
+  const [profilePhone, setProfilePhone] = useState(user?.phone || "");
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const openProfile = () => {
+    setProfileName(user?.name || "");
+    setProfilePhone(user?.phone || "");
+    setMsg(null);
+    setShowDropdown(false);
+    setShowProfile(true);
+  };
+
+  const saveProfile = async () => {
+    if (!profileName.trim()) { setMsg({ type: "error", text: "Name cannot be empty" }); return; }
+    setSaving(true);
+    setMsg(null);
+    try {
+      const res = await api.put<any>("/auth/me", { name: profileName, phone: profilePhone });
+      onUserUpdate?.(res);
+      setMsg({ type: "success", text: "Profile updated" });
+      setTimeout(() => { setShowProfile(false); }, 700);
+    } catch (e: any) {
+      setMsg({ type: "error", text: e.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const [curPwd, setCurPwd] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [confirmPwd, setConfirmPwd] = useState("");
+  const [pwdMsg, setPwdMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [savingPwd, setSavingPwd] = useState(false);
+
+  const openPassword = () => {
+    setCurPwd(""); setNewPwd(""); setConfirmPwd(""); setPwdMsg(null);
+    setShowDropdown(false);
+    setShowPassword(true);
+  };
+
+  const savePassword = async () => {
+    if (!curPwd || !newPwd || !confirmPwd) { setPwdMsg({ type: "error", text: "All fields are required" }); return; }
+    if (newPwd !== confirmPwd) { setPwdMsg({ type: "error", text: "New passwords do not match" }); return; }
+    setSavingPwd(true);
+    setPwdMsg(null);
+    try {
+      await api.put("/auth/change-password", { current_password: curPwd, new_password: newPwd });
+      setPwdMsg({ type: "success", text: "Password changed successfully" });
+      setTimeout(() => { setShowPassword(false); }, 900);
+    } catch (e: any) {
+      setPwdMsg({ type: "error", text: e.message });
+    } finally {
+      setSavingPwd(false);
+    }
+  };
 
   const notifications = [
     { id: 1, type: "report", text: "Report RPT-001 is ready for approval", time: "2 min ago", unread: true },
@@ -364,11 +424,11 @@ export function Header({ title, subtitle, breadcrumb, actions, user, onLogout }:
                 <div className="text-[11px] text-slate-400">{user?.role}</div>
               </div>
               {[
-                { label: "My Profile", icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
-                { label: "Change Password", icon: "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" },
-                { label: "Preferences", icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" },
+                { label: "My Profile", icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z", action: openProfile },
+                { label: "Change Password", icon: "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z", action: openPassword },
+                { label: "Preferences", icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z", action: () => setShowDropdown(false) },
               ].map((item) => (
-                <button key={item.label} className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                <button key={item.label} onClick={item.action} className="w-full flex items-center gap-2.5 px-4 py-2 text-xs text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
                   <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
                   </svg>
@@ -390,6 +450,57 @@ export function Header({ title, subtitle, breadcrumb, actions, user, onLogout }:
           )}
         </div>
       </div>
+
+      {/* My Profile modal */}
+      <Modal open={showProfile} onClose={() => setShowProfile(false)} title="My Profile" width="max-w-md">
+        <div className="space-y-4">
+          <Field label="Full Name" required>
+            <Input value={profileName} onChange={setProfileName} />
+          </Field>
+          <Field label="Phone">
+            <Input value={profilePhone} onChange={setProfilePhone} />
+          </Field>
+          <Field label="Email">
+            <div className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">{user?.email || "—"}</div>
+          </Field>
+          <Field label="Role">
+            <div className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">{user?.role || "—"}</div>
+          </Field>
+          {msg && (
+            <div className={`text-xs font-medium px-3 py-2 rounded-lg ${msg.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
+              {msg.text}
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+            <Btn variant="secondary" onClick={() => setShowProfile(false)}>Cancel</Btn>
+            <Btn onClick={saveProfile} disabled={saving}>{saving ? "Saving..." : "Save Changes"}</Btn>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Change Password modal */}
+      <Modal open={showPassword} onClose={() => setShowPassword(false)} title="Change Password" width="max-w-md">
+        <div className="space-y-4">
+          <Field label="Current Password" required>
+            <Input type="password" placeholder="••••••••" value={curPwd} onChange={setCurPwd} />
+          </Field>
+          <Field label="New Password" required>
+            <Input type="password" placeholder="Min 6 characters" value={newPwd} onChange={setNewPwd} />
+          </Field>
+          <Field label="Confirm New Password" required>
+            <Input type="password" placeholder="Re-enter new password" value={confirmPwd} onChange={setConfirmPwd} />
+          </Field>
+          {pwdMsg && (
+            <div className={`text-xs font-medium px-3 py-2 rounded-lg ${pwdMsg.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
+              {pwdMsg.text}
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+            <Btn variant="secondary" onClick={() => setShowPassword(false)}>Cancel</Btn>
+            <Btn onClick={savePassword} disabled={savingPwd}>{savingPwd ? "Saving..." : "Change Password"}</Btn>
+          </div>
+        </div>
+      </Modal>
     </header>
   );
 }
@@ -401,14 +512,15 @@ interface LayoutProps {
   breadcrumb?: string[];
   actions?: React.ReactNode;
   children: React.ReactNode;
-  user?: { name: string; role: string };
+  user?: { name: string; role: string; email?: string; phone?: string; user_id?: number };
   onLogout?: () => void;
+  onUserUpdate?: (user: { name: string; role?: string; email?: string; phone?: string; user_id?: number }) => void;
 }
 
-export default function Layout({ title, subtitle, breadcrumb, actions, children, user, onLogout }: LayoutProps) {
+export default function Layout({ title, subtitle, breadcrumb, actions, children, user, onLogout, onUserUpdate }: LayoutProps) {
   return (
     <div className="flex flex-col h-full overflow-hidden" style={{ background: "#F8FAFC" }}>
-      <Header title={title} subtitle={subtitle} breadcrumb={breadcrumb} actions={actions} user={user} onLogout={onLogout} />
+      <Header title={title} subtitle={subtitle} breadcrumb={breadcrumb} actions={actions} user={user} onLogout={onLogout} onUserUpdate={onUserUpdate} />
       <main className="flex-1 overflow-auto p-5 space-y-5">
         {children}
       </main>

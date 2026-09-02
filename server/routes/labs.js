@@ -58,13 +58,14 @@ router.post('/orders', (req, res) => {
 router.get('/samples', (req, res) => {
   try {
     const { status, order_item_id } = req.query;
-    let query = `SELECT s.*, toi.test_id, t.test_name, p.name as patient_name, p.patient_unique_id
+    let query = `SELECT s.*, toi.test_id, t.test_name, p.name as patient_name, p.patient_unique_id, u.name as collected_by_name
       FROM samples s
       JOIN test_order_items toi ON s.order_item_id = toi.order_item_id
       JOIN tests t ON toi.test_id = t.test_id
       JOIN test_orders too ON toi.order_id = too.order_id
       JOIN patient_visits pv ON too.visit_id = pv.visit_id
-      JOIN patients p ON pv.patient_id = p.patient_id WHERE 1=1`;
+      JOIN patients p ON pv.patient_id = p.patient_id
+      LEFT JOIN users u ON s.collected_by = u.user_id WHERE 1=1`;
     const params = [];
     if (status) { query += ' AND s.collection_status = ?'; params.push(status); }
     if (order_item_id) { query += ' AND s.order_item_id = ?'; params.push(order_item_id); }
@@ -79,7 +80,7 @@ router.post('/samples', (req, res) => {
   try {
     const { order_item_id, sample_type, collected_by } = req.body;
     const barcode = `BC-${uuidv4().slice(0, 8).toUpperCase()}`;
-    const result = db.prepare('INSERT INTO samples (order_item_id, sample_barcode, sample_type, collection_date, collected_by, collection_status, status) VALUES (?, ?, ?, datetime("now"), ?, "Collected", "Processing")')
+    const result = db.prepare("INSERT INTO samples (order_item_id, sample_barcode, sample_type, collection_date, collected_by, collection_status, status) VALUES (?, ?, ?, datetime('now'), ?, 'Collected', 'Processing')")
       .run(order_item_id, barcode, sample_type, collected_by);
 
     db.prepare("UPDATE test_order_items SET status = 'Sample Collected' WHERE order_item_id = ?").run(order_item_id);
@@ -124,11 +125,12 @@ router.get('/results/sample/:sampleId', (req, res) => {
 router.get('/reports', (req, res) => {
   try {
     const { status, page = 1, limit = 25 } = req.query;
-    let query = `SELECT r.*, too.visit_id, p.name as patient_name, p.patient_unique_id
+    let query = `SELECT r.*, u.name as approved_by, too.visit_id, p.name as patient_name, p.patient_unique_id
       FROM reports r
       JOIN test_orders too ON r.order_id = too.order_id
       JOIN patient_visits pv ON too.visit_id = pv.visit_id
-      JOIN patients p ON pv.patient_id = p.patient_id WHERE 1=1`;
+      JOIN patients p ON pv.patient_id = p.patient_id
+      LEFT JOIN users u ON r.approved_by = u.user_id WHERE 1=1`;
     const params = [];
     if (status) { query += ' AND r.status = ?'; params.push(status); }
 
@@ -147,7 +149,7 @@ router.post('/reports', (req, res) => {
   try {
     const { order_id, approved_by } = req.body;
     const barcode = `RPT-${uuidv4().slice(0, 8).toUpperCase()}`;
-    const result = db.prepare('INSERT INTO reports (order_id, barcode, status, approved_by, approved_at) VALUES (?, ?, "Draft", ?, datetime("now"))')
+    const result = db.prepare("INSERT INTO reports (order_id, barcode, status, approved_by, approved_at) VALUES (?, ?, 'Draft', ?, datetime('now'))")
       .run(order_id, barcode, approved_by);
     res.json({ report_id: result.lastInsertRowid, barcode });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -156,7 +158,7 @@ router.post('/reports', (req, res) => {
 router.put('/reports/:id/approve', (req, res) => {
   try {
     const { approved_by, status } = req.body;
-    db.prepare('UPDATE reports SET status=?, approved_by=?, approved_at=datetime("now") WHERE report_id=?')
+    db.prepare('UPDATE reports SET status=?, approved_by=?, approved_at=datetime(\'now\') WHERE report_id=?')
       .run(status || 'Approved', approved_by, req.params.id);
     const report = db.prepare('SELECT * FROM reports WHERE report_id = ?').get(req.params.id);
     res.json(report);
@@ -165,12 +167,13 @@ router.put('/reports/:id/approve', (req, res) => {
 
 router.get('/reports/:id', (req, res) => {
   try {
-    const report = db.prepare(`SELECT r.*, p.name as patient_name, p.patient_unique_id, p.gender, p.date_of_birth, p.mobile as patient_mobile,
+    const report = db.prepare(`SELECT r.*, u.name as approved_by, p.name as patient_name, p.patient_unique_id, p.gender, p.date_of_birth, p.mobile as patient_mobile,
       d.name as doctor_name, too.visit_id
       FROM reports r
       JOIN test_orders too ON r.order_id = too.order_id
       JOIN patient_visits pv ON too.visit_id = pv.visit_id
       JOIN patients p ON pv.patient_id = p.patient_id
+      LEFT JOIN users u ON r.approved_by = u.user_id
       LEFT JOIN doctor_consultations dc ON pv.visit_id = dc.visit_id
       LEFT JOIN doctors d ON dc.doctor_id = d.doctor_id
       WHERE r.report_id = ?`).get(req.params.id);

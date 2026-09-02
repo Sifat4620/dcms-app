@@ -6,9 +6,10 @@ interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
   user: { name: string; role: string; email: string };
   onLogout: () => void;
+  onUserUpdate: (user: any) => void;
 }
 
-export default function Notifications({ pageProps, user, onLogout }: PageProps) {
+export default function Notifications({ pageProps, user, onLogout, onUserUpdate }: PageProps) {
   const [templates, setTemplates] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [stats, setStats] = useState({ sentToday: 0, delivered: 0, failed: 0, thisMonth: 0 });
@@ -52,6 +53,7 @@ export default function Notifications({ pageProps, user, onLogout }: PageProps) 
       breadcrumb={pageProps.breadcrumb}
       user={user}
       onLogout={onLogout}
+      onUserUpdate={onUserUpdate}
       actions={<Btn onClick={() => setShowAdd(true)}>+ Add Template</Btn>}
     >
       <div className="space-y-4">

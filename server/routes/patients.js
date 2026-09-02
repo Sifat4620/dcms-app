@@ -50,10 +50,10 @@ router.post('/', (req, res) => {
     const lastPatient = db.prepare('SELECT patient_unique_id FROM patients ORDER BY patient_id DESC LIMIT 1').get();
     let nextNum = 1;
     if (lastPatient) {
-      const match = lastPatient.patient_unique_id.match(/PAT-(\d+)/);
+      const match = lastPatient.patient_unique_id.match(/PT-(\d+)/);
       if (match) nextNum = parseInt(match[1]) + 1;
     }
-    const patient_unique_id = `PAT-${String(nextNum).padStart(5, '0')}`;
+    const patient_unique_id = `PT-${String(nextNum).padStart(5, '0')}`;
 
     const result = db.prepare(`INSERT INTO patients (patient_unique_id, name, father_name, mother_name, date_of_birth, gender, blood_group, mobile, email, address, emergency_contact, occupation, nid_no, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(patient_unique_id, name, father_name, mother_name, date_of_birth, gender, blood_group, mobile, email, address, emergency_contact, occupation, nid_no, notes);

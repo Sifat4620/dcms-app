@@ -54,6 +54,7 @@ type PageComponent = React.ComponentType<{
   pageProps: { title: string; breadcrumb: string[] };
   user: AppUser & { role: string };
   onLogout: () => void;
+  onUserUpdate: (user: AppUser) => void;
 }>;
 
 const PAGES: Record<PageId, PageComponent> = {
@@ -90,6 +91,11 @@ export default function App() {
     setUser(null);
   };
 
+  const handleUserUpdate = (u: AppUser) => {
+    setUser(u);
+    setStoredUser(u);
+  };
+
   if (!user) {
     return <Login onLogin={handleLogin} />;
   }
@@ -102,7 +108,7 @@ export default function App() {
     <div className="flex h-full overflow-hidden" style={{ background: "#F8FAFC" }}>
       <Sidebar active={activePage} onNavigate={(id) => setActivePage(id as PageId)} userRole={role} />
       <div className="flex-1 overflow-hidden min-w-0">
-        <PageComponent pageProps={pageProps} user={{ ...user, role }} onLogout={handleLogout} />
+        <PageComponent pageProps={pageProps} user={{ ...user, role }} onLogout={handleLogout} onUserUpdate={handleUserUpdate} />
       </div>
     </div>
   );

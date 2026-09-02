@@ -6,6 +6,7 @@ interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
   user: { name: string; role: string; email: string };
   onLogout: () => void;
+  onUserUpdate: (user: any) => void;
 }
 
 const BLOOD_COLORS: Record<string, "red" | "blue" | "green" | "purple" | "orange" | "yellow" | "gray"> = {
@@ -22,7 +23,7 @@ const AVATAR_COLORS = [
   { bg: "#F0FDFA", text: "#0F766E" },
 ];
 
-export default function Patients({ pageProps, user, onLogout }: PageProps) {
+export default function Patients({ pageProps, user, onLogout, onUserUpdate }: PageProps) {
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -75,6 +76,7 @@ export default function Patients({ pageProps, user, onLogout }: PageProps) {
       breadcrumb={pageProps.breadcrumb}
       user={user}
       onLogout={onLogout}
+      onUserUpdate={onUserUpdate}
       actions={
         <>
           <SearchBar placeholder="Search by name, ID, mobile..." value={search} onChange={setSearch} />

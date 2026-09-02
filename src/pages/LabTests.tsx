@@ -6,11 +6,12 @@ interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
   user: { name: string; role: string; email: string };
   onLogout: () => void;
+  onUserUpdate: (user: any) => void;
 }
 
 const CATEGORIES = ["All", "Hematology", "Biochemistry", "Microbiology", "Immunology", "Cardiology", "Radiology"];
 
-export default function LabTests({ pageProps, user, onLogout }: PageProps) {
+export default function LabTests({ pageProps, user, onLogout, onUserUpdate }: PageProps) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [tab, setTab] = useState<"tests" | "packages">("tests");
@@ -57,6 +58,7 @@ export default function LabTests({ pageProps, user, onLogout }: PageProps) {
       breadcrumb={pageProps.breadcrumb}
       user={user}
       onLogout={onLogout}
+      onUserUpdate={onUserUpdate}
       actions={
         <>
           <SearchBar placeholder="Test name..." value={search} onChange={setSearch} />

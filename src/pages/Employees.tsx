@@ -6,9 +6,10 @@ interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
   user: { name: string; role: string; email: string };
   onLogout: () => void;
+  onUserUpdate: (user: any) => void;
 }
 
-export default function Employees({ pageProps, user, onLogout }: PageProps) {
+export default function Employees({ pageProps, user, onLogout, onUserUpdate }: PageProps) {
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<"employees" | "attendance">("employees");
   const [employees, setEmployees] = useState<any[]>([]);
@@ -59,6 +60,7 @@ export default function Employees({ pageProps, user, onLogout }: PageProps) {
       breadcrumb={pageProps.breadcrumb}
       user={user}
       onLogout={onLogout}
+      onUserUpdate={onUserUpdate}
       actions={
         <>
           <SearchBar placeholder="Name, dept, designation..." value={search} onChange={setSearch} />

@@ -6,11 +6,12 @@ interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
   user: { name: string; role: string; email: string };
   onLogout: () => void;
+  onUserUpdate: (user: any) => void;
 }
 
 const AVAIL_COLORS = ["#10B981", "#F59E0B", "#EF4444", "#10B981", "#10B981"];
 
-export default function Doctors({ pageProps, user, onLogout }: PageProps) {
+export default function Doctors({ pageProps, user, onLogout, onUserUpdate }: PageProps) {
   const [search, setSearch] = useState("");
   const [view, setView] = useState<"table" | "cards">("table");
   const [loading, setLoading] = useState(false);
@@ -55,6 +56,7 @@ export default function Doctors({ pageProps, user, onLogout }: PageProps) {
       breadcrumb={pageProps.breadcrumb}
       user={user}
       onLogout={onLogout}
+      onUserUpdate={onUserUpdate}
       actions={
         <>
           <SearchBar placeholder="Search doctors..." value={search} onChange={setSearch} />

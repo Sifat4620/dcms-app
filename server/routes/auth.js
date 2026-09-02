@@ -50,13 +50,55 @@ router.post('/register', (req, res) => {
   }
 });
 
+const currentUser = (req) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return null;
+  const decoded = jwt.verify(token, JWT_SECRET);
+  return db.prepare('SELECT u.user_id, u.name, u.email, u.phone, r.role_name, u.branch_id FROM users u JOIN roles r ON u.role_id = r.role_id WHERE u.user_id = ?').get(decoded.user_id);
+};
+
+router.put('/me', (req, res) => {
+  try {
+    const user = currentUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const { name, phone, email } = req.body;
+    if (email && email !== user.email) {
+      const exists = db.prepare('SELECT user_id FROM users WHERE email = ? AND user_id != ?').get(email, user.user_id);
+      if (exists) return res.status(400).json({ error: 'Email already in use' });
+    }
+    db.prepare('UPDATE users SET name = COALESCE(?, name), phone = COALESCE(?, phone), email = COALESCE(?, email) WHERE user_id = ?')
+      .run(name ?? null, phone ?? null, email ?? null, user.user_id);
+    const updated = currentUser(req);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/change-password', (req, res) => {
+  try {
+    const user = currentUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const { current_password, new_password } = req.body;
+    if (!current_password || !new_password) return res.status(400).json({ error: 'Current and new password required' });
+    if (new_password.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    const row = db.prepare('SELECT password FROM users WHERE user_id = ?').get(user.user_id);
+    if (!bcrypt.compareSync(current_password, row.password)) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+    const hash = bcrypt.hashSync(new_password, 10);
+    db.prepare('UPDATE users SET password = ? WHERE user_id = ?').run(hash, user.user_id);
+    res.json({ message: 'Password changed successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/me', (req, res) => {
   try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (!token) return res.status(401).json({ error: 'No token' });
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const user = db.prepare('SELECT u.user_id, u.name, u.email, u.phone, r.role_name, u.branch_id FROM users u JOIN roles r ON u.role_id = r.role_id WHERE u.user_id = ?').get(decoded.user_id);
+    const user = currentUser(req);
+    if (!user) return res.status(401).json({ error: 'No token' });
     res.json(user);
   } catch (err) {
     res.status(403).json({ error: 'Invalid token' });

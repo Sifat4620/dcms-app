@@ -138,13 +138,14 @@ if (existingPatients.count === 0) {
   const patientIds = patients.map((p) => insertPatient.run(...p).lastInsertRowid);
 
   const insertVisit = db.prepare('INSERT INTO patient_visits (patient_id, branch_id, visit_date, visit_type, referred_by) VALUES (?, ?, ?, ?, ?)');
+  const dateAt = (off) => new Date(Date.now() + off * 86400000).toISOString().replace('T', ' ').slice(0, 19);
   const visitData = [
-    [patientIds[0], 1, "datetime('now', '-5 days')", 'Lab Test', 'Dr. Rafiqul Islam'],
-    [patientIds[1], 1, "datetime('now', '-4 days')", 'OPD', 'Dr. Sultana Razia'],
-    [patientIds[2], 1, "datetime('now', '-3 days')", 'Lab Test', null],
-    [patientIds[3], 1, "datetime('now', '-2 days')", 'Lab Test', 'Dr. Farhana Rahman'],
-    [patientIds[4], 1, "datetime('now', '-6 days')", 'OPD', 'Dr. Rafiqul Islam'],
-    [patientIds[5], 1, "datetime('now', '-1 days')", 'Lab Test', null],
+    [patientIds[0], 1, dateAt(-5), 'Lab Test', 'Dr. Rafiqul Islam'],
+    [patientIds[1], 1, dateAt(-4), 'OPD', 'Dr. Sultana Razia'],
+    [patientIds[2], 1, dateAt(-3), 'Lab Test', null],
+    [patientIds[3], 1, dateAt(-2), 'Lab Test', 'Dr. Farhana Rahman'],
+    [patientIds[4], 1, dateAt(-6), 'OPD', 'Dr. Rafiqul Islam'],
+    [patientIds[5], 1, dateAt(-1), 'Lab Test', null],
   ];
   const visitIds = visitData.map((v) => insertVisit.run(v[0], v[1], v[2], v[3], v[4]).lastInsertRowid);
 
@@ -155,7 +156,7 @@ if (existingPatients.count === 0) {
   const insertReport = db.prepare('INSERT INTO reports (order_id, barcode, status, approved_by, approved_at) VALUES (?, ?, ?, ?, ?)');
 
   const testPrice = (id) => db.prepare('SELECT price FROM tests WHERE test_id = ?').get(id).price;
-  const today = "datetime('now')";
+  const today = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
   const orders = [
     { visit: visitIds[0], tests: [1, 2], discount: 50, status: 'Completed' },
@@ -169,7 +170,7 @@ if (existingPatients.count === 0) {
   const orderIds = [];
   orders.forEach((o) => {
     const total = o.tests.reduce((s, t) => s + testPrice(t), 0) - o.discount;
-    orderIds.push(insertOrder.run(o.visit, "datetime('now')", o.discount, total, o.status).lastInsertRowid);
+    orderIds.push(insertOrder.run(o.visit, today, o.discount, total, o.status).lastInsertRowid);
   });
 
   const samplesFor = (orderItemId) => {
@@ -218,7 +219,7 @@ if (existingPatients.count === 0) {
   orders.slice(0, 5).forEach((o, idx) => {
     const orderId = orderIds[idx];
     const status = reportStatuses[idx];
-    const approvedAt = status === 'Released' || status === 'Approved' ? "datetime('now', '-1 days')" : null;
+    const approvedAt = status === 'Released' || status === 'Approved' ? dateAt(-1) : null;
     insertReport.run(orderId, `RPT-${String(idx + 1).padStart(3, '0')}`, status, status === 'Draft' || status === 'Verified' ? null : 1, approvedAt);
   });
 
@@ -282,6 +283,107 @@ if (existingPatients.count === 0) {
   }
 
   console.log('Demo transactional data seeded');
+}
+
+const existingDoctors = db.prepare('SELECT COUNT(*) as count FROM doctors').get();
+if (existingDoctors.count === 0) {
+  const insertDoctor = db.prepare('INSERT INTO doctors (branch_id, name, specialization, degree, bmdc_no, phone, email, consultation_fee, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+  const doctors = [
+    ['Dr. Rafiqul Islam', 'Cardiology', 'MBBS, FCPS (Cardiology)', 'A12345', '01711-300001', 'rafiqul@dcms.com', 800, 'active'],
+    ['Dr. Sultana Razia', 'Internal Medicine', 'MBBS, MD (Medicine)', 'A12346', '01711-300002', 'razia@dcms.com', 600, 'active'],
+    ['Dr. Farhana Rahman', 'Gynae & Obs', 'MBBS, DGO', 'A12347', '01711-300003', 'farhana@dcms.com', 700, 'active'],
+    ['Dr. Mahmud Hasan', 'Pediatrics', 'MBBS, FCPS (Pediatrics)', 'A12348', '01711-300004', 'mahmud@dcms.com', 500, 'active'],
+    ['Dr. Asma Khanom', 'Dermatology', 'MBBS, DDV', 'A12349', '01711-300005', 'asma@dcms.com', 550, 'inactive'],
+  ];
+  doctors.forEach((d) => insertDoctor.run(1, ...d));
+  console.log('Doctors seeded');
+}
+
+const existingAppts = db.prepare('SELECT COUNT(*) as count FROM appointments').get();
+if (existingAppts.count === 0) {
+  const insertApt = db.prepare('INSERT INTO appointments (branch_id, patient_id, doctor_id, appointment_date, appointment_time, token_no, status) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  const patientRows = db.prepare('SELECT patient_id FROM patients ORDER BY patient_id').all();
+  const doctorRows = db.prepare('SELECT doctor_id FROM doctors ORDER BY doctor_id').all();
+  const dateAt = (off) => new Date(Date.now() + off * 86400000).toISOString().split('T')[0];
+  const aptRows = [
+    [patientRows[0].patient_id, doctorRows[0].doctor_id, dateAt(1), '09:30', 1, 'Pending'],
+    [patientRows[1].patient_id, doctorRows[1].doctor_id, dateAt(1), '10:00', 2, 'Pending'],
+    [patientRows[2].patient_id, doctorRows[2].doctor_id, dateAt(0), '11:30', 3, 'Checked-in'],
+    [patientRows[3].patient_id, doctorRows[3].doctor_id, dateAt(-1), '10:30', 4, 'Completed'],
+    [patientRows[4].patient_id, doctorRows[0].doctor_id, dateAt(2), '12:00', 5, 'Confirmed'],
+    [patientRows[5].patient_id, doctorRows[2].doctor_id, dateAt(0), '04:30', 6, 'Pending'],
+  ];
+  aptRows.forEach((r) => insertApt.run(1, r[0], r[1], r[2], r[3], r[4], r[5]));
+  console.log('Appointments seeded');
+}
+
+const existingTokens = db.prepare('SELECT COUNT(*) as count FROM tokens').get();
+if (existingTokens.count === 0) {
+  const insertToken = db.prepare('INSERT INTO tokens (branch_id, department_id, doctor_id, appointment_id, token_no, token_type, status) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  const doctorRows = db.prepare('SELECT doctor_id FROM doctors ORDER BY doctor_id').all();
+  const apptRows = db.prepare('SELECT appointment_id FROM appointments ORDER BY appointment_id').all();
+  const tokenRows = [
+    [1, 1, doctorRows[0].doctor_id, apptRows[0].appointment_id, 1, 'General', 'Waiting'],
+    [1, 1, doctorRows[1].doctor_id, apptRows[1].appointment_id, 2, 'General', 'Serving'],
+    [1, 1, doctorRows[2].doctor_id, apptRows[2].appointment_id, 3, 'Priority', 'Serving'],
+    [1, 1, doctorRows[3].doctor_id, apptRows[3].appointment_id, 4, 'General', 'Completed'],
+    [1, 1, doctorRows[0].doctor_id, apptRows[4].appointment_id, 5, 'Emergency', 'Waiting'],
+  ];
+  tokenRows.forEach((t) => insertToken.run(...t));
+  console.log('Tokens seeded');
+}
+
+const existingCorp = db.prepare('SELECT COUNT(*) as count FROM corporate_clients').get();
+if (existingCorp.count === 0) {
+  const insertCorp = db.prepare('INSERT INTO corporate_clients (company_name, contact_person, phone, email, address, credit_limit, discount_rate, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+  const clients = [
+    ['Grameen Bank Ltd.', 'Md. Kamal Hossain', '01711-400001', 'hr@grameenbank.com', 'Mirpur, Dhaka', 500000, 10, 'active'],
+    ['Beximco Pharma', 'Salma Chowdhury', '01711-400002', 'admin@beximcop.com', 'Gulshan, Dhaka', 800000, 15, 'active'],
+    ['BRAC NGO', 'Moniruzzaman', '01711-400003', 'people@brac.net', 'Mohakhali, Dhaka', 300000, 12, 'active'],
+    ['Darus Salam Hospital', 'Rakibul Islam', '01711-400004', 'ops@dsh.com', 'Motijheel, Dhaka', 200000, 8, 'inactive'],
+  ];
+  clients.forEach((c) => insertCorp.run(...c));
+  console.log('Corporate clients seeded');
+}
+
+const existingPurchases = db.prepare('SELECT COUNT(*) as count FROM purchases').get();
+if (existingPurchases.count === 0) {
+  const supplierRows = db.prepare('SELECT supplier_id FROM suppliers ORDER BY supplier_id').all();
+  const itemRows = db.prepare('SELECT item_id FROM inventory_items ORDER BY item_id').all();
+  const insertPurchase = db.prepare('INSERT INTO purchases (supplier_id, invoice_no, total_amount, status) VALUES (?, ?, ?, ?)');
+  const insertPurchaseItem = db.prepare('INSERT INTO purchase_items (purchase_id, item_id, quantity, unit_price, total_price) VALUES (?, ?, ?, ?, ?)');
+  const insertStockLog = db.prepare("INSERT INTO inventory_stock_logs (item_id, log_type, quantity, reference_no, notes, created_by) VALUES (?, 'IN', ?, ?, ?, 1)");
+  const purchaseRows = [
+    { s: supplierRows[0].supplier_id, no: 'PO-0001', items: [[itemRows[0].item_id, 100, 15], [itemRows[1].item_id, 200, 8]], status: 'Received' },
+    { s: supplierRows[1].supplier_id, no: 'PO-0002', items: [[itemRows[2].item_id, 50, 300], [itemRows[3].item_id, 100, 10]], status: 'Received' },
+    { s: supplierRows[2].supplier_id, no: 'PO-0003', items: [[itemRows[4].item_id, 20, 450], [itemRows[5].item_id, 10, 2500]], status: 'Pending' },
+  ];
+  purchaseRows.forEach((p) => {
+    const total = p.items.reduce((s, i) => s + i[1] * i[2], 0);
+    const purchaseId = insertPurchase.run(p.s, p.no, total, p.status).lastInsertRowid;
+    p.items.forEach((i) => {
+      insertPurchaseItem.run(purchaseId, i[0], i[1], i[2], i[1] * i[2]);
+      if (p.status === 'Received') {
+        insertStockLog.run(i[0], i[1], p.no, 'Purchased from supplier');
+        db.prepare('UPDATE inventory_items SET current_stock = current_stock + ? WHERE item_id = ?').run(i[1], i[0]);
+      }
+    });
+  });
+  console.log('Purchases seeded');
+}
+
+const existingNotifs = db.prepare('SELECT COUNT(*) as count FROM notifications').get();
+if (existingNotifs.count === 0) {
+  const insertNotif = db.prepare('INSERT INTO notifications (template_id, recipient_name, recipient_phone, channel, message, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  const templateRows = db.prepare('SELECT template_id FROM notification_templates ORDER BY template_id').all();
+  const notifRows = [
+    [templateRows[0].template_id, 'Rahim Uddin', '01711-100001', 'SMS', 'Your appointment with Dr. Rafiqul Islam is confirmed.', 'Delivered', 1],
+    [templateRows[2].template_id, 'Nusrat Jahan', '01614-400004', 'SMS', 'Token #3 is now being served at Pathology.', 'Delivered', 1],
+    [templateRows[3].template_id, 'Kamal Hossain', '01913-300003', 'SMS', 'Your diagnostic report is ready.', 'Sent', 1],
+    [templateRows[4].template_id, 'Abdul Karim', '01515-500005', 'SMS', 'You have an outstanding balance of BDT 950.', 'Failed', 1],
+  ];
+  notifRows.forEach((n) => insertNotif.run(...n));
+  console.log('Notifications seeded');
 }
 
 console.log('Database initialization complete!');

@@ -6,6 +6,7 @@ interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
   user: { name: string; role: string; email: string };
   onLogout: () => void;
+  onUserUpdate: (user: any) => void;
 }
 
 interface DashboardData {
@@ -32,7 +33,7 @@ const APT_STATUS_COLOR: Record<string, "blue" | "green" | "gray" | "red" | "yell
   Confirmed: "blue", "Checked-in": "green", Completed: "gray", Cancelled: "red", "No Show": "red", Pending: "yellow",
 };
 
-export default function Dashboard({ pageProps, user, onLogout }: PageProps) {
+export default function Dashboard({ pageProps, user, onLogout, onUserUpdate }: PageProps) {
   const [data, setData] = useState<DashboardData | null>(null);
 
   useEffect(() => {
@@ -54,6 +55,7 @@ export default function Dashboard({ pageProps, user, onLogout }: PageProps) {
       breadcrumb={pageProps.breadcrumb}
       user={user}
       onLogout={onLogout}
+      onUserUpdate={onUserUpdate}
     >
     <div className="space-y-5">
       {/* Stat cards */}

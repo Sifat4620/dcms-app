@@ -6,6 +6,7 @@ interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
   user: { name: string; role: string; email: string };
   onLogout: () => void;
+  onUserUpdate: (user: any) => void;
 }
 
 const TABS = ["Branch", "Users", "Roles", "Test Config", "System"];
@@ -24,7 +25,7 @@ const ROLES = [
 
 const MAX_PERMISSIONS = 42;
 
-export default function Settings({ pageProps, user, onLogout }: PageProps) {
+export default function Settings({ pageProps, user, onLogout, onUserUpdate }: PageProps) {
   const [tab, setTab] = useState("Branch");
   const [users, setUsers] = useState<any[]>([]);
 
@@ -39,6 +40,7 @@ export default function Settings({ pageProps, user, onLogout }: PageProps) {
       breadcrumb={pageProps.breadcrumb}
       user={user}
       onLogout={onLogout}
+      onUserUpdate={onUserUpdate}
     >
       <div className="space-y-4">
         {/* Tab bar */}

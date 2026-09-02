@@ -6,9 +6,10 @@ interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
   user: { name: string; role: string; email: string };
   onLogout: () => void;
+  onUserUpdate: (user: any) => void;
 }
 
-export default function Corporate({ pageProps, user, onLogout }: PageProps) {
+export default function Corporate({ pageProps, user, onLogout, onUserUpdate }: PageProps) {
   const [search, setSearch] = useState("");
   const [clients, setClients] = useState<any[]>([]);
   const [showAdd, setShowAdd] = useState(false);
@@ -55,6 +56,7 @@ export default function Corporate({ pageProps, user, onLogout }: PageProps) {
       breadcrumb={pageProps.breadcrumb}
       user={user}
       onLogout={onLogout}
+      onUserUpdate={onUserUpdate}
       actions={
         <>
           <SearchBar placeholder="Search clients..." value={search} onChange={setSearch} />

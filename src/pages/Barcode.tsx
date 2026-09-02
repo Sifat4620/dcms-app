@@ -4,8 +4,9 @@ import { api } from "../data/api";
 
 interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
-  user: { name: string; role: string; email: string };
+  user: { name: string; role: string; email: string; user_id?: number };
   onLogout: () => void;
+  onUserUpdate: (user: any) => void;
 }
 
 const STATUS_COLOR: Record<string, "yellow" | "blue" | "green" | "purple" | "gray" | "red"> = {
@@ -23,7 +24,7 @@ const STEP_DOT_COLORS: Record<string, string> = {
   Completed: "#10B981",
 };
 
-export default function Barcode({ pageProps, user, onLogout }: PageProps) {
+export default function Barcode({ pageProps, user, onLogout, onUserUpdate }: PageProps) {
   const [search, setSearch] = useState("");
   const [scanned, setScanned] = useState("");
   const [scanResult, setScanResult] = useState<any | null>(null);
@@ -54,7 +55,7 @@ export default function Barcode({ pageProps, user, onLogout }: PageProps) {
 
   const handleNewSample = async () => {
     try {
-      await api.post("/labs/samples", { order_item_id: Number(orderItemId), sample_type: sampleType, collected_by: user.name });
+      await api.post("/labs/samples", { order_item_id: Number(orderItemId), sample_type: sampleType, collected_by: user.user_id });
       setShowNew(false);
       setOrderItemId("");
       setSampleType("");
@@ -82,6 +83,7 @@ export default function Barcode({ pageProps, user, onLogout }: PageProps) {
       breadcrumb={pageProps.breadcrumb}
       user={user}
       onLogout={onLogout}
+      onUserUpdate={onUserUpdate}
       actions={
         <>
           <SearchBar placeholder="Patient, barcode..." value={search} onChange={setSearch} />
@@ -185,7 +187,7 @@ export default function Barcode({ pageProps, user, onLogout }: PageProps) {
                 </TD>
                 <TD>{s.test_name}</TD>
                 <TD><span className="text-[11px] text-slate-600">{s.sample_type}</span></TD>
-                <TD>{s.collected_by}</TD>
+                <TD>{s.collected_by_name || s.collected_by}</TD>
                 <TD>
                   <div className="flex items-center gap-1.5">
                     <span

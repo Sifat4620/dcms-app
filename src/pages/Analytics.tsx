@@ -6,9 +6,10 @@ interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
   user: { name: string; role: string; email: string };
   onLogout: () => void;
+  onUserUpdate: (user: any) => void;
 }
 
-export default function Analytics({ pageProps, user, onLogout }: PageProps) {
+export default function Analytics({ pageProps, user, onLogout, onUserUpdate }: PageProps) {
   const [financial, setFinancial] = useState<any>({ revenue: [], totalRevenue: 0, testRevenue: [], doctorRevenue: [] });
   const [dash, setDash] = useState<any>(null);
   const [patientStats, setPatientStats] = useState<any>({ newPatients: 0, totalPatients: 0, genderDistribution: [] });
@@ -38,6 +39,7 @@ export default function Analytics({ pageProps, user, onLogout }: PageProps) {
       breadcrumb={pageProps.breadcrumb}
       user={user}
       onLogout={onLogout}
+      onUserUpdate={onUserUpdate}
     >
       <div className="space-y-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

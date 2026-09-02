@@ -6,6 +6,7 @@ interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
   user: { name: string; role: string; email: string };
   onLogout: () => void;
+  onUserUpdate: (user: any) => void;
 }
 
 const TYPE_COLOR: Record<string, "gray" | "orange" | "red"> = {
@@ -22,7 +23,7 @@ const STATUS_COLOR: Record<string, "blue" | "green" | "gray" | "yellow" | "red">
   Cancelled: "red",
 };
 
-export default function Tokens({ pageProps, user, onLogout }: PageProps) {
+export default function Tokens({ pageProps, user, onLogout, onUserUpdate }: PageProps) {
   const [tokens, setTokens] = useState<any[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ token_type: "General", patient_note: "" });
@@ -63,6 +64,7 @@ export default function Tokens({ pageProps, user, onLogout }: PageProps) {
       breadcrumb={pageProps.breadcrumb}
       user={user}
       onLogout={onLogout}
+      onUserUpdate={onUserUpdate}
       actions={<Btn onClick={() => setShowAdd(true)}>+ Issue Token</Btn>}
     >
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

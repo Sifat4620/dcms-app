@@ -6,15 +6,18 @@ interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
   user: { name: string; role: string; email: string };
   onLogout: () => void;
+  onUserUpdate: (user: any) => void;
 }
 
 const METHOD_COLOR: Record<string, "green" | "blue" | "purple"> = {
   Cash: "green",
   Card: "blue",
-  bKash: "purple",
+  "Mobile Banking": "purple",
+  "Bank Transfer": "purple",
+  "Online Payment": "purple",
 };
 
-export default function Payments({ pageProps, user, onLogout }: PageProps) {
+export default function Payments({ pageProps, user, onLogout, onUserUpdate }: PageProps) {
   const [search, setSearch] = useState("");
   const [dueList, setDueList] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
@@ -58,6 +61,7 @@ export default function Payments({ pageProps, user, onLogout }: PageProps) {
       breadcrumb={pageProps.breadcrumb}
       user={user}
       onLogout={onLogout}
+      onUserUpdate={onUserUpdate}
       actions={
         <>
           <SearchBar placeholder="Patient or invoice..." value={search} onChange={setSearch} />
@@ -150,7 +154,7 @@ export default function Payments({ pageProps, user, onLogout }: PageProps) {
               value={method}
               onChange={(e) => setMethod(e.target.value)}
             >
-              {["Cash", "Card", "bKash"].map((m) => <option key={m} value={m}>{m}</option>)}
+              {["Cash", "Card", "Mobile Banking", "Bank Transfer", "Online Payment"].map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
           </Field>
         </div>

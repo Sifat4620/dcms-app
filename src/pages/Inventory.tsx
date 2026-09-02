@@ -6,9 +6,10 @@ interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
   user: { name: string; role: string; email: string };
   onLogout: () => void;
+  onUserUpdate: (user: any) => void;
 }
 
-export default function Inventory({ pageProps, user, onLogout }: PageProps) {
+export default function Inventory({ pageProps, user, onLogout, onUserUpdate }: PageProps) {
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<"stock" | "suppliers" | "purchases">("stock");
   const [items, setItems] = useState<any[]>([]);
@@ -64,6 +65,7 @@ export default function Inventory({ pageProps, user, onLogout }: PageProps) {
       breadcrumb={pageProps.breadcrumb}
       user={user}
       onLogout={onLogout}
+      onUserUpdate={onUserUpdate}
       actions={
         <>
           <SearchBar placeholder="Search items..." value={search} onChange={setSearch} />

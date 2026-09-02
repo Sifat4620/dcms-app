@@ -4,8 +4,9 @@ import { api } from "../data/api";
 
 interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
-  user: { name: string; role: string; email: string };
+  user: { user_id?: number; name: string; role: string; email: string };
   onLogout: () => void;
+  onUserUpdate: (user: any) => void;
 }
 
 const STATUS_COLOR: Record<string, "gray" | "blue" | "purple" | "green"> = {
@@ -15,7 +16,7 @@ const STATUS_COLOR: Record<string, "gray" | "blue" | "purple" | "green"> = {
   Released: "green",
 };
 
-export default function Reports({ pageProps, user, onLogout }: PageProps) {
+export default function Reports({ pageProps, user, onLogout, onUserUpdate }: PageProps) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
   const [reports, setReports] = useState<any[]>([]);
@@ -48,7 +49,7 @@ export default function Reports({ pageProps, user, onLogout }: PageProps) {
   const nextAction = async (r: any) => {
     const status = r.status === "Draft" ? "Verified" : r.status === "Verified" ? "Approved" : "Released";
     try {
-      await api.put(`/labs/reports/${r.report_id}/approve`, { approved_by: user.name, status });
+      await api.put(`/labs/reports/${r.report_id}/approve`, { approved_by: user.user_id, status });
       setDetail(null);
       loadReports();
     } catch (e: any) {
@@ -63,6 +64,7 @@ export default function Reports({ pageProps, user, onLogout }: PageProps) {
       breadcrumb={pageProps.breadcrumb}
       user={user}
       onLogout={onLogout}
+      onUserUpdate={onUserUpdate}
       actions={
         <>
           <SearchBar placeholder="Patient or report ID..." value={search} onChange={setSearch} />

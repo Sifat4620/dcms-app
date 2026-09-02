@@ -6,6 +6,7 @@ interface PageProps {
   pageProps: { title: string; breadcrumb: string[] };
   user: { name: string; role: string; email: string };
   onLogout: () => void;
+  onUserUpdate: (user: any) => void;
 }
 
 const STATUS_COLOR: Record<string, "green" | "blue" | "yellow" | "red" | "gray" | "purple" | "orange"> = {
@@ -27,7 +28,7 @@ const WEEK_DAYS = [
   { short: "Sat", date: 6 },
 ];
 
-export default function Appointments({ pageProps, user, onLogout }: PageProps) {
+export default function Appointments({ pageProps, user, onLogout, onUserUpdate }: PageProps) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
   const [selectedDay, setSelectedDay] = useState(1);
@@ -96,6 +97,7 @@ export default function Appointments({ pageProps, user, onLogout }: PageProps) {
       breadcrumb={pageProps.breadcrumb}
       user={user}
       onLogout={onLogout}
+      onUserUpdate={onUserUpdate}
       actions={
         <>
           <SearchBar placeholder="Search patient or doctor..." value={search} onChange={setSearch} />
