@@ -424,4 +424,5 @@ export function initializeDatabase() {
   addCol('test_orders', 'doctor_id', 'INTEGER REFERENCES doctors(doctor_id)');
   addCol('test_orders', 'appointment_id', 'INTEGER REFERENCES appointments(appointment_id)');
   addCol('patient_visits', 'appointment_id', 'INTEGER REFERENCES appointments(appointment_id)');
+  addCol('invoices', 'appointment_id', 'INTEGER REFERENCES appointments(appointment_id)');
 }

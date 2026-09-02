@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../config/database.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { v4 as uuidv4 } from 'uuid';
+import { getOrCreateAppointmentInvoice, getAppointmentInvoiceData } from './appointments.js';
 
 const router = Router();
 router.use(authenticateToken);
@@ -89,6 +90,124 @@ router.get('/samples', (req, res) => {
     const samples = db.prepare(query).all(...params);
     res.json(samples);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Collect a new sample and generate a full bill (patient + doctor + test + fee).
+// If the patient has an appointment (given or detected), the test cost is merged
+// onto the appointment's unified invoice (consultation fee + lab tests). Otherwise
+// it creates a standalone visit invoice. Any amount paid is applied to the invoice.
+router.post('/collect', (req, res) => {
+  try {
+    const { patient_id, doctor_id, test_id, sample_type, consultation_fee = 0, amount_paid = 0, payment_method = 'Cash', discount = 0, appointment_id = null } = req.body;
+
+    if (!patient_id || !test_id) {
+      return res.status(400).json({ error: 'patient_id and test_id are required' });
+    }
+
+    const patient = db.prepare('SELECT * FROM patients WHERE patient_id = ?').get(patient_id);
+    if (!patient) return res.status(404).json({ error: 'Patient not found' });
+    const test = db.prepare('SELECT * FROM tests WHERE test_id = ?').get(test_id);
+    if (!test) return res.status(404).json({ error: 'Test not found' });
+    let doctor = null;
+    if (doctor_id) {
+      doctor = db.prepare('SELECT * FROM doctors WHERE doctor_id = ?').get(doctor_id);
+      if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
+    }
+
+    // Resolve the appointment: explicit appointment_id, or the patient's open appointment
+    let apt = null;
+    if (appointment_id) {
+      apt = db.prepare('SELECT * FROM appointments WHERE appointment_id = ?').get(appointment_id);
+      if (!apt) return res.status(404).json({ error: 'Appointment not found' });
+    } else if (doctor_id) {
+      apt = db.prepare("SELECT * FROM appointments WHERE patient_id = ? AND doctor_id = ? AND status IN ('Pending','Confirmed','Checked-in') ORDER BY appointment_date DESC, appointment_id DESC LIMIT 1")
+        .get(patient_id, doctor_id);
+    } else {
+      apt = db.prepare("SELECT * FROM appointments WHERE patient_id = ? AND status IN ('Pending','Confirmed','Checked-in') ORDER BY appointment_date DESC, appointment_id DESC LIMIT 1")
+        .get(patient_id);
+    }
+
+    const fee = apt ? (Number(apt.fee) || 0) : (Number(consultation_fee) || 0);
+    const testPrice = Number(test.price) || 0;
+    const paid = Number(amount_paid) || 0;
+
+    // 1. Create a visit (link to appointment if we have one)
+    const visitRes = db.prepare('INSERT INTO patient_visits (patient_id, branch_id, appointment_id, visit_type, referred_by) VALUES (?, ?, ?, ?, ?)')
+      .run(patient_id, apt?.branch_id || req.user.branch_id || 1, apt?.appointment_id || null, apt ? 'OPD' : 'Lab Test', doctor ? doctor.name : null);
+    const visitId = visitRes.lastInsertRowid;
+
+    // 2. Create test order + item (linked to appointment if present)
+    const orderRes = db.prepare('INSERT INTO test_orders (visit_id, doctor_id, appointment_id, discount, total_amount) VALUES (?, ?, ?, ?, ?)')
+      .run(visitId, doctor_id || null, apt?.appointment_id || null, discount || 0, testPrice);
+    const orderId = orderRes.lastInsertRowid;
+
+    const orderItemRes = db.prepare('INSERT INTO test_order_items (order_id, test_id, price, discount) VALUES (?, ?, ?, ?)')
+      .run(orderId, test_id, testPrice, 0);
+    const orderItemId = orderItemRes.lastInsertRowid;
+
+    // 3. Create sample
+    const barcode = `BC-${uuidv4().slice(0, 8).toUpperCase()}`;
+    const sampleRes = db.prepare("INSERT INTO samples (order_item_id, sample_barcode, sample_type, collection_date, collected_by, collection_status, status) VALUES (?, ?, ?, datetime('now'), ?, 'Collected', 'Processing')")
+      .run(orderItemId, barcode, sample_type || test.sample_type, req.user.user_id);
+    db.prepare("UPDATE test_order_items SET status = 'Sample Collected' WHERE order_item_id = ?").run(orderItemId);
+
+    // 4. Build the invoice
+    let invoiceId, invoiceData;
+    if (apt) {
+      // Merge onto the appointment's unified invoice (consultation + all linked tests)
+      const inv = getOrCreateAppointmentInvoice(apt, req.user.user_id);
+      invoiceId = inv.invoice_id;
+      invoiceData = getAppointmentInvoiceData(inv.invoice_id);
+    } else {
+      // Standalone visit invoice (consultation fee + test)
+      const subtotal = fee + testPrice;
+      const lastInvoice = db.prepare('SELECT invoice_no FROM invoices ORDER BY invoice_id DESC LIMIT 1').get();
+      let nextNum = 1;
+      if (lastInvoice) {
+        const m = lastInvoice.invoice_no && lastInvoice.invoice_no.match(/INV-(\d+)/);
+        if (m) nextNum = parseInt(m[1]) + 1;
+      }
+      const invoice_no = `INV-${String(nextNum).padStart(6, '0')}`;
+      const totalAmount = Math.round((subtotal - (discount || 0)) * 100) / 100;
+      const due = Math.max(0, Math.round((totalAmount - paid) * 100) / 100);
+      const status = due <= 0 ? 'Paid' : paid > 0 ? 'Partial' : 'Unpaid';
+
+      const invRes = db.prepare('INSERT INTO invoices (visit_id, invoice_no, subtotal, discount, total_amount, paid_amount, due_amount, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(visitId, invoice_no, subtotal, discount || 0, totalAmount, paid, due, status);
+      invoiceId = invRes.lastInsertRowid;
+
+      const itemStmt = db.prepare('INSERT INTO invoice_items (invoice_id, item_type, item_id, item_name, quantity, unit_price, discount, amount) VALUES (?, ?, ?, ?, 1, ?, 0, ?)');
+      if (fee > 0) {
+        itemStmt.run(invoiceId, 'Consultation', doctor_id || null, doctor ? `Consultation - ${doctor.name}` : 'Consultation', fee, fee);
+      }
+      itemStmt.run(invoiceId, 'Test', test_id, test.test_name, testPrice, testPrice);
+
+      const invoice = db.prepare(`SELECT i.*, p.name as patient_name, p.patient_unique_id FROM invoices i JOIN patient_visits pv ON i.visit_id = pv.visit_id JOIN patients p ON pv.patient_id = p.patient_id WHERE i.invoice_id = ?`).get(invoiceId);
+      const invoiceItems = db.prepare('SELECT * FROM invoice_items WHERE invoice_id = ?').all(invoiceId);
+      invoiceData = { ...invoice, items: invoiceItems };
+    }
+
+    // 5. Record payment if any
+    if (paid > 0) {
+      const cur = db.prepare('SELECT * FROM invoices WHERE invoice_id = ?').get(invoiceId);
+      const newPaid = (Number(cur.paid_amount) || 0) + paid;
+      const newDue = Math.max(0, Math.round(((Number(cur.total_amount) || 0) - newPaid) * 100) / 100);
+      const newStatus = newDue <= 0 ? 'Paid' : newPaid > 0 ? 'Partial' : 'Unpaid';
+      db.prepare('UPDATE invoices SET paid_amount=?, due_amount=?, status=? WHERE invoice_id=?')
+        .run(newPaid, newDue, newStatus, invoiceId);
+      db.prepare('INSERT INTO payments (invoice_id, amount, payment_method, received_by, notes) VALUES (?, ?, ?, ?, ?)')
+        .run(invoiceId, paid, payment_method, req.user.user_id, 'Sample collection');
+      invoiceData = apt
+        ? getAppointmentInvoiceData(invoiceId)
+        : { ...invoiceData, paid_amount: newPaid, due_amount: newDue, status: newStatus };
+    }
+
+    const sample = db.prepare('SELECT * FROM samples WHERE sample_id = ?').get(sampleRes.lastInsertRowid);
+
+    res.json({ sample, invoice: invoiceData, visit_id: visitId, order_id: orderId, appointment_id: apt?.appointment_id || null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.post('/samples', (req, res) => {

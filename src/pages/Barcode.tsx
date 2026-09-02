@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Layout, { Card, Badge, Btn, SearchBar, Table, TR, TD, Modal, Field, Input } from "../components/Layout";
+import InvoiceModal from "../components/InvoiceModal";
 import { api } from "../data/api";
 
 interface PageProps {
@@ -29,18 +30,29 @@ export default function Barcode({ pageProps, user, onLogout, onUserUpdate }: Pag
   const [scanned, setScanned] = useState("");
   const [scanResult, setScanResult] = useState<any | null>(null);
   const [samples, setSamples] = useState<any[]>([]);
-  const [orders, setOrders] = useState<any[]>([]);
+  const [patients, setPatients] = useState<any[]>([]);
+  const [doctors, setDoctors] = useState<any[]>([]);
+  const [tests, setTests] = useState<any[]>([]);
   const [showNew, setShowNew] = useState(false);
-  const [orderItemId, setOrderItemId] = useState("");
+  const [patientId, setPatientId] = useState("");
+  const [doctorId, setDoctorId] = useState("");
+  const [testId, setTestId] = useState("");
   const [sampleType, setSampleType] = useState("");
+  const [consultFee, setConsultFee] = useState("");
+  const [amountPaid, setAmountPaid] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("Cash");
+  const [collecting, setCollecting] = useState(false);
+  const [invoiceData, setInvoiceData] = useState<any | null>(null);
 
   const loadSamples = () => {
     api.get<any>("/labs/samples").then(setSamples).catch(() => {});
-    api.get<any>("/labs/orders?limit=200").then((res) => setOrders(res.data)).catch(() => {});
   };
 
   useEffect(() => {
     loadSamples();
+    api.get<any>("/patients?limit=200").then((res) => setPatients(res.data || [])).catch(() => {});
+    api.get<any>("/doctors?limit=200").then((res) => setDoctors(res.data || [])).catch(() => {});
+    api.get<any>("/tests?limit=200").then((res) => setTests(res.data || [])).catch(() => {});
   }, []);
 
   const handleScan = async () => {
@@ -53,15 +65,46 @@ export default function Barcode({ pageProps, user, onLogout, onUserUpdate }: Pag
     }
   };
 
+  const selectedTest = tests.find((t) => String(t.test_id) === testId);
+  const selectedDoctor = doctors.find((d) => String(d.doctor_id) === doctorId);
+  const testPrice = Number(selectedTest?.price) || 0;
+  const totalBill = testPrice + (Number(consultFee) || 0);
+
+  const openNew = () => {
+    setPatientId("");
+    setDoctorId("");
+    setTestId("");
+    setSampleType("");
+    setConsultFee("");
+    setAmountPaid("");
+    setPaymentMethod("Cash");
+    setShowNew(true);
+  };
+
   const handleNewSample = async () => {
+    if (!patientId || !testId) {
+      alert("Please select a patient and a test");
+      return;
+    }
+    setCollecting(true);
     try {
-      await api.post("/labs/samples", { order_item_id: Number(orderItemId), sample_type: sampleType, collected_by: user.user_id });
+      const res = await api.post<any>("/labs/collect", {
+        patient_id: Number(patientId),
+        doctor_id: doctorId ? Number(doctorId) : null,
+        test_id: Number(testId),
+        sample_type: sampleType,
+        consultation_fee: Number(consultFee || 0),
+        amount_paid: Number(amountPaid || 0),
+        payment_method: paymentMethod,
+      });
       setShowNew(false);
-      setOrderItemId("");
       setSampleType("");
       loadSamples();
+      if (res?.invoice) setInvoiceData(res.invoice);
     } catch (e: any) {
       alert(e.message);
+    } finally {
+      setCollecting(false);
     }
   };
 
@@ -87,7 +130,7 @@ export default function Barcode({ pageProps, user, onLogout, onUserUpdate }: Pag
       actions={
         <>
           <SearchBar placeholder="Patient, barcode..." value={search} onChange={setSearch} />
-          <Btn onClick={() => setShowNew(true)}>+ New Sample</Btn>
+          <Btn onClick={openNew}>+ New Sample</Btn>
         </>
       }
     >
@@ -209,31 +252,78 @@ export default function Barcode({ pageProps, user, onLogout, onUserUpdate }: Pag
         </Card>
       </div>
 
-      <Modal open={showNew} onClose={() => setShowNew(false)} title="Collect New Sample">
-        <Field label="Order Item" required>
-          <select
-            className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400 bg-white"
-            value={orderItemId}
-            onChange={(e) => setOrderItemId(e.target.value)}
-          >
-            <option value="">Select pending order item</option>
-            {orders.flatMap((o: any) =>
-              (o.items || []).filter((it: any) => it.status !== "Sample Collected").map((it: any) => (
-                <option key={it.order_item_id} value={it.order_item_id}>
-                  Order #{o.order_id} — Test #{it.test_id}
-                </option>
-              ))
-            )}
-          </select>
-        </Field>
-        <Field label="Sample Type" required>
-          <Input placeholder="Blood / Urine" value={sampleType} onChange={setSampleType} />
-        </Field>
+      <Modal open={showNew} onClose={() => setShowNew(false)} title="Collect New Sample & Bill" width="max-w-xl">
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Patient" required>
+            <select
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400 bg-white"
+              value={patientId}
+              onChange={(e) => setPatientId(e.target.value)}
+            >
+              <option value="">Select patient</option>
+              {patients.map((p) => (
+                <option key={p.patient_id} value={p.patient_id}>{p.name} ({p.patient_unique_id})</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Doctor (Consultation)">
+            <select
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400 bg-white"
+              value={doctorId}
+              onChange={(e) => setDoctorId(e.target.value)}
+            >
+              <option value="">No doctor</option>
+              {doctors.map((d) => (
+                <option key={d.doctor_id} value={d.doctor_id}>{d.name} — {d.specialization || "General"}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Test" required>
+            <select
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400 bg-white"
+              value={testId}
+              onChange={(e) => setTestId(e.target.value)}
+            >
+              <option value="">Select test</option>
+              {tests.map((t) => (
+                <option key={t.test_id} value={t.test_id}>{t.test_name} — ৳ {t.price}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Sample Type">
+            <Input placeholder="Blood / Urine" value={sampleType} onChange={setSampleType} />
+          </Field>
+          <Field label="Consultation Fee (BDT)">
+            <Input type="number" placeholder="0" value={consultFee} onChange={setConsultFee} />
+          </Field>
+          <Field label="Amount Paid (BDT)">
+            <Input type="number" placeholder="0" value={amountPaid} onChange={setAmountPaid} />
+          </Field>
+          <Field label="Payment Method">
+            <select
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400 bg-white"
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value)}
+            >
+              {["Cash", "Card", "Mobile Banking", "Bank Transfer", "Online Payment"].map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </Field>
+        </div>
+
+        <div className="p-3 rounded-lg bg-slate-50 border border-slate-100 text-xs mt-4">
+          <div className="flex justify-between"><span className="text-slate-500">Lab Test</span><span className="font-mono">৳ {testPrice}</span></div>
+          <div className="flex justify-between mt-1"><span className="text-slate-500">Consultation</span><span className="font-mono">৳ {Number(consultFee) || 0}</span></div>
+          <div className="flex justify-between mt-2 pt-2 border-t border-slate-200 font-semibold text-slate-800"><span>Total Bill</span><span>৳ {totalBill}</span></div>
+          <div className="flex justify-between mt-1 text-emerald-700"><span>Due</span><span className="font-mono">৳ {Math.max(0, totalBill - (Number(amountPaid) || 0))}</span></div>
+        </div>
+
         <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-slate-100">
           <Btn variant="secondary" onClick={() => setShowNew(false)}>Cancel</Btn>
-          <Btn onClick={handleNewSample}>Collect Sample</Btn>
+          <Btn onClick={handleNewSample} disabled={collecting}>{collecting ? "Saving..." : "Collect & Bill"}</Btn>
         </div>
       </Modal>
+
+      <InvoiceModal invoice={invoiceData} open={!!invoiceData} onClose={() => setInvoiceData(null)} />
     </Layout>
   );
 }

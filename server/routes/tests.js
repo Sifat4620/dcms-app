@@ -53,9 +53,9 @@ router.get('/:id', (req, res) => {
 
 router.post('/', (req, res) => {
   try {
-    const { category_id, department_id, test_name, sample_type, unit, price, reference_range, turnaround_time } = req.body;
-    const result = db.prepare('INSERT INTO tests (category_id, department_id, test_name, sample_type, unit, price, reference_range, turnaround_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(category_id, department_id, test_name, sample_type, unit, price || 0, reference_range, turnaround_time);
+    const { category_id, department_id, test_name, sample_type, unit, price, reference_range, turnaround_time, status } = req.body;
+    const result = db.prepare('INSERT INTO tests (category_id, department_id, test_name, sample_type, unit, price, reference_range, turnaround_time, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(category_id, department_id, test_name, sample_type, unit, price || 0, reference_range, turnaround_time, status || 'active');
     const test = db.prepare('SELECT * FROM tests WHERE test_id = ?').get(result.lastInsertRowid);
     res.json(test);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -99,6 +99,27 @@ router.post('/packages', (req, res) => {
       test_ids.forEach(tid => stmt.run(pkgId, tid));
     }
     res.json({ package_id: pkgId, package_name, description, price, discount, package_price });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/packages/:id', (req, res) => {
+  try {
+    const { package_name, description, price, discount, package_price, test_ids, status } = req.body;
+    const pkg = db.prepare('SELECT * FROM test_packages WHERE package_id = ?').get(req.params.id);
+    if (!pkg) return res.status(404).json({ error: 'Package not found' });
+
+    db.prepare('UPDATE test_packages SET package_name=?, description=?, price=?, discount=?, package_price=?, status=? WHERE package_id=?')
+      .run(package_name ?? pkg.package_name, description ?? pkg.description, price ?? pkg.price, discount ?? pkg.discount, package_price ?? pkg.package_price, status ?? pkg.status, req.params.id);
+
+    if (Array.isArray(test_ids)) {
+      db.prepare('DELETE FROM package_tests WHERE package_id = ?').run(req.params.id);
+      const stmt = db.prepare('INSERT INTO package_tests (package_id, test_id) VALUES (?, ?)');
+      test_ids.forEach((tid) => stmt.run(req.params.id, tid));
+    }
+
+    const updated = db.prepare('SELECT * FROM test_packages WHERE package_id = ?').get(req.params.id);
+    updated.tests = db.prepare('SELECT t.* FROM tests t JOIN package_tests pt ON t.test_id = pt.test_id WHERE pt.package_id = ?').all(req.params.id);
+    res.json(updated);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

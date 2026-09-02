@@ -18,11 +18,20 @@ export default function LabTests({ pageProps, user, onLogout, onUserUpdate }: Pa
   const [tests, setTests] = useState<any[]>([]);
   const [packages, setPackages] = useState<any[]>([]);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ test_name: "", category_id: "", test_code: "", price: "0", sample_type: "", unit: "" });
+  const [form, setForm] = useState({ test_name: "", category_id: "", department_id: "", sample_type: "", unit: "", price: "0", turnaround_time: "", status: "active" });
+  const [categories, setCategories] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [editTest, setEditTest] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState<any>(null);
+  const [editPkg, setEditPkg] = useState<any | null>(null);
+  const [pkgForm, setPkgForm] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
 
   const loadData = () => {
     api.get<any>("/tests?limit=200").then((res) => setTests(res.data)).catch(() => {});
     api.get<any>("/tests/packages/all").then(setPackages).catch(() => {});
+    api.get<any>("/tests/categories").then(setCategories).catch(() => {});
+    api.get<any>("/tests/departments").then(setDepartments).catch(() => {});
   };
 
   useEffect(() => {
@@ -42,12 +51,98 @@ export default function LabTests({ pageProps, user, onLogout, onUserUpdate }: Pa
 
   const handleAdd = async () => {
     try {
-      await api.post("/tests", { ...form, price: Number(form.price), category_id: form.category_id ? Number(form.category_id) : null });
+      await api.post("/tests", {
+        test_name: form.test_name,
+        category_id: form.category_id ? Number(form.category_id) : null,
+        department_id: form.department_id ? Number(form.department_id) : null,
+        sample_type: form.sample_type || null,
+        unit: form.unit || null,
+        price: Number(form.price) || 0,
+        turnaround_time: form.turnaround_time || null,
+        status: form.status,
+      });
       setShowAdd(false);
-      setForm({ test_name: "", category_id: "", test_code: "", price: "0", sample_type: "", unit: "" });
+      setForm({ test_name: "", category_id: "", department_id: "", sample_type: "", unit: "", price: "0", turnaround_time: "", status: "active" });
       loadData();
     } catch (e: any) {
       alert(e.message);
+    }
+  };
+
+  const openEdit = (t: any) => {
+    setEditTest(t);
+    setEditForm({
+      test_id: t.test_id,
+      test_name: t.test_name || "",
+      category_id: t.category_id != null ? String(t.category_id) : "",
+      department_id: t.department_id != null ? String(t.department_id) : "",
+      sample_type: t.sample_type || "",
+      unit: t.unit || "",
+      price: String(t.price || 0),
+      turnaround_time: t.turnaround_time || "",
+      status: t.status || "active",
+    });
+  };
+
+  const saveTest = async () => {
+    if (!editForm) return;
+    try {
+      await api.put(`/tests/${editForm.test_id}`, {
+        test_name: editForm.test_name,
+        category_id: editForm.category_id ? Number(editForm.category_id) : null,
+        department_id: editForm.department_id ? Number(editForm.department_id) : null,
+        sample_type: editForm.sample_type || null,
+        unit: editForm.unit || null,
+        price: Number(editForm.price) || 0,
+        turnaround_time: editForm.turnaround_time || null,
+        status: editForm.status,
+      });
+      setEditTest(null);
+      setEditForm(null);
+      loadData();
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
+
+  const openEditPkg = (pkg: any) => {
+    setEditPkg(pkg);
+    setPkgForm({
+      package_name: pkg.package_name || "",
+      description: pkg.description || "",
+      price: String(pkg.price || 0),
+      discount: String(pkg.discount || 0),
+      package_price: String(pkg.package_price || pkg.price || 0),
+      test_ids: (pkg.tests || []).map((t: any) => t.test_id),
+    });
+  };
+
+  const togglePkgTest = (testId: number) => {
+    const ids = pkgForm?.test_ids || [];
+    setPkgForm({
+      ...pkgForm,
+      test_ids: ids.includes(testId) ? ids.filter((t: number) => t !== testId) : [...ids, testId],
+    });
+  };
+
+  const savePkg = async () => {
+    setSaving(true);
+    try {
+      await api.put(`/tests/packages/${editPkg.package_id}`, {
+        package_name: pkgForm.package_name,
+        description: pkgForm.description,
+        price: Number(pkgForm.price || 0),
+        discount: Number(pkgForm.discount || 0),
+        package_price: Number(pkgForm.package_price || 0),
+        test_ids: pkgForm.test_ids || [],
+      });
+      setEditPkg(null);
+      setPkgForm(null);
+      loadData();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -108,7 +203,7 @@ export default function LabTests({ pageProps, user, onLogout, onUserUpdate }: Pa
             </div>
 
             <Card>
-              <Table headers={["Test ID", "Test Name", "Category", "Department", "Sample", "Price (BDT)", "TAT", "Unit", "Status"]}>
+              <Table headers={["Test ID", "Test Name", "Category", "Department", "Sample", "Price (BDT)", "TAT", "Unit", "Status", "Actions"]}>
                 {filtered.map((t) => (
                   <TR key={t.test_id}>
                     <TD mono>TST-{t.test_id}</TD>
@@ -120,6 +215,7 @@ export default function LabTests({ pageProps, user, onLogout, onUserUpdate }: Pa
                     <TD><span className="text-[11px] text-slate-600">{t.turnaround_time || "—"}</span></TD>
                     <TD mono>{t.unit || "—"}</TD>
                     <TD><Badge label={t.status} color={t.status === "active" ? "green" : "gray"} /></TD>
+                    <TD><Btn size="xs" variant="secondary" onClick={() => openEdit(t)}>Edit</Btn></TD>
                   </TR>
                 ))}
                 {filtered.length === 0 && (
@@ -155,7 +251,7 @@ export default function LabTests({ pageProps, user, onLogout, onUserUpdate }: Pa
                 </div>
                 <div className="flex gap-2 mt-3">
                   <Btn size="xs" variant="secondary">View Tests</Btn>
-                  <Btn size="xs" variant="secondary">Edit</Btn>
+                  <Btn size="xs" variant="secondary" onClick={() => openEditPkg(pkg)}>Edit</Btn>
                 </div>
               </Card>
             ))}
@@ -174,17 +270,164 @@ export default function LabTests({ pageProps, user, onLogout, onUserUpdate }: Pa
           <Field label="Price (BDT)">
             <Input type="number" value={form.price} onChange={(v) => setForm({ ...form, price: v })} />
           </Field>
+          <Field label="Category">
+            <select
+              value={form.category_id}
+              onChange={(e) => setForm({ ...form, category_id: e.target.value })}
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-400/40 focus:border-sky-400"
+            >
+              <option value="">No category</option>
+              {categories.map((c) => (
+                <option key={c.category_id} value={c.category_id}>{c.category_name}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Department">
+            <select
+              value={form.department_id}
+              onChange={(e) => setForm({ ...form, department_id: e.target.value })}
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-400/40 focus:border-sky-400"
+            >
+              <option value="">No department</option>
+              {departments.map((d) => (
+                <option key={d.department_id} value={d.department_id}>{d.department_name}</option>
+              ))}
+            </select>
+          </Field>
           <Field label="Sample Type">
             <Input placeholder="Blood / Urine" value={form.sample_type} onChange={(v) => setForm({ ...form, sample_type: v })} />
           </Field>
           <Field label="Unit">
             <Input placeholder="mmol/L" value={form.unit} onChange={(v) => setForm({ ...form, unit: v })} />
           </Field>
+          <Field label="TAT (Turnaround)">
+            <Input placeholder="e.g. 4 hours" value={form.turnaround_time} onChange={(v) => setForm({ ...form, turnaround_time: v })} />
+          </Field>
+          <Field label="Status">
+            <select
+              value={form.status}
+              onChange={(e) => setForm({ ...form, status: e.target.value })}
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-400/40 focus:border-sky-400"
+            >
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </Field>
         </div>
         <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-slate-100">
           <Btn variant="secondary" onClick={() => setShowAdd(false)}>Cancel</Btn>
           <Btn onClick={handleAdd}>Add Test</Btn>
         </div>
+      </Modal>
+
+      {/* Edit test */}
+      <Modal open={!!editTest} onClose={() => { setEditTest(null); setEditForm(null); }} title={`Edit Test — ${editTest?.test_name || ""}`}>
+        {editForm && (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Test Name" required>
+              <Input value={editForm.test_name} onChange={(v) => setEditForm({ ...editForm, test_name: v })} />
+            </Field>
+            <Field label="Price (BDT)">
+              <Input type="number" value={editForm.price} onChange={(v) => setEditForm({ ...editForm, price: v })} />
+            </Field>
+            <Field label="Category">
+              <select
+                value={editForm.category_id}
+                onChange={(e) => setEditForm({ ...editForm, category_id: e.target.value })}
+                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-400/40 focus:border-sky-400"
+              >
+                <option value="">No category</option>
+                {categories.map((c) => (
+                  <option key={c.category_id} value={c.category_id}>{c.category_name}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Department">
+              <select
+                value={editForm.department_id}
+                onChange={(e) => setEditForm({ ...editForm, department_id: e.target.value })}
+                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-400/40 focus:border-sky-400"
+              >
+                <option value="">No department</option>
+                {departments.map((d) => (
+                  <option key={d.department_id} value={d.department_id}>{d.department_name}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Sample Type">
+              <Input value={editForm.sample_type} onChange={(v) => setEditForm({ ...editForm, sample_type: v })} />
+            </Field>
+            <Field label="Unit">
+              <Input value={editForm.unit} onChange={(v) => setEditForm({ ...editForm, unit: v })} />
+            </Field>
+            <Field label="TAT (Turnaround)">
+              <Input placeholder="e.g. 4 hours" value={editForm.turnaround_time} onChange={(v) => setEditForm({ ...editForm, turnaround_time: v })} />
+            </Field>
+            <Field label="Status">
+              <select
+                value={editForm.status}
+                onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-400/40 focus:border-sky-400"
+              >
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </Field>
+          </div>
+        )}
+        <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-slate-100">
+          <Btn variant="secondary" onClick={() => { setEditTest(null); setEditForm(null); }}>Cancel</Btn>
+          <Btn onClick={saveTest}>Save Test</Btn>
+        </div>
+      </Modal>
+
+      {/* Edit package */}
+      <Modal open={!!editPkg} onClose={() => { setEditPkg(null); setPkgForm(null); }} title={`Edit Package — ${editPkg?.package_name || ""}`} width="max-w-2xl">
+        {pkgForm && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Package Name" required>
+                <Input value={pkgForm.package_name} onChange={(v) => setPkgForm({ ...pkgForm, package_name: v })} />
+              </Field>
+              <Field label="Description">
+                <Input value={pkgForm.description} onChange={(v) => setPkgForm({ ...pkgForm, description: v })} />
+              </Field>
+              <Field label="Price (BDT)">
+                <Input type="number" value={pkgForm.price} onChange={(v) => setPkgForm({ ...pkgForm, price: v })} />
+              </Field>
+              <Field label="Discount (BDT)">
+                <Input type="number" value={pkgForm.discount} onChange={(v) => setPkgForm({ ...pkgForm, discount: v })} />
+              </Field>
+              <Field label="Package Price (BDT)">
+                <Input type="number" value={pkgForm.package_price} onChange={(v) => setPkgForm({ ...pkgForm, package_price: v })} />
+              </Field>
+            </div>
+
+            <div>
+              <div className="text-[11px] font-semibold text-slate-500 mb-2 uppercase tracking-wide">Include Tests</div>
+              <div className="max-h-44 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-50 pr-1">
+                {tests.length === 0 && <div className="p-3 text-[11px] text-slate-400">Loading tests...</div>}
+                {tests.map((t) => (
+                  <label key={t.test_id} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={(pkgForm.test_ids || []).includes(t.test_id)}
+                      onChange={() => togglePkgTest(t.test_id)}
+                      className="accent-sky-500"
+                    />
+                    <span className="font-medium text-slate-700">{t.test_name}</span>
+                    <span className="ml-auto text-slate-400 font-mono">৳ {t.price}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-100">
+              <Btn variant="secondary" onClick={() => { setEditPkg(null); setPkgForm(null); }}>Cancel</Btn>
+              <Btn onClick={savePkg} disabled={saving}>{saving ? "Saving..." : "Save Package"}</Btn>
+            </div>
+          </div>
+        )}
       </Modal>
     </Layout>
   );

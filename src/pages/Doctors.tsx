@@ -11,15 +11,6 @@ interface PageProps {
 
 const AVAIL_COLORS = ["#10B981", "#F59E0B", "#EF4444", "#10B981", "#10B981"];
 
-const STATUS_COLOR: Record<string, "green" | "blue" | "yellow" | "red" | "gray" | "purple" | "orange"> = {
-  Confirmed: "blue",
-  "Checked-in": "green",
-  Completed: "gray",
-  Cancelled: "red",
-  "No Show": "red",
-  Pending: "yellow",
-};
-
 export default function Doctors({ pageProps, user, onLogout, onUserUpdate }: PageProps) {
   const [search, setSearch] = useState("");
   const [view, setView] = useState<"table" | "cards">("table");
@@ -28,52 +19,22 @@ export default function Doctors({ pageProps, user, onLogout, onUserUpdate }: Pag
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ name: "", specialization: "", degree: "", bmdc_no: "", phone: "", email: "", consultation_fee: "0" });
   const [profile, setProfile] = useState<any | null>(null);
-  const [tests, setTests] = useState<any[]>([]);
-  const [prescribeTo, setPrescribeTo] = useState<any | null>(null);
-  const [selectedTests, setSelectedTests] = useState<number[]>([]);
-  const [prescribeSaving, setPrescribeSaving] = useState(false);
-  const [prescribeMsg, setPrescribeMsg] = useState<string | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editForm, setEditForm] = useState<any>(null);
+  const [addingSchedule, setAddingSchedule] = useState(false);
+  const [scheduleDay, setScheduleDay] = useState("Sun");
+  const [scheduleStart, setScheduleStart] = useState("09:00");
+  const [scheduleEnd, setScheduleEnd] = useState("17:00");
 
   const openProfile = async (id: number) => {
     try {
       const data = await api.get<any>(`/doctors/${id}`);
       setProfile(data);
+      setEditMode(false);
+      setEditForm(null);
+      setAddingSchedule(false);
     } catch (e: any) {
       alert(e.message);
-    }
-  };
-
-  const openPrescribe = async (apt: any) => {
-    setPrescribeTo(apt);
-    setSelectedTests([]);
-    setPrescribeMsg(null);
-    if (tests.length === 0) {
-      api.get<any>("/tests?limit=200").then((res) => setTests(res.data.data || [])).catch(() => {});
-    }
-  };
-
-  const toggleTest = (id: number) => {
-    setSelectedTests((prev) => prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]);
-  };
-
-  const submitPrescribe = async () => {
-    if (selectedTests.length === 0) { setPrescribeMsg("Select at least one test"); return; }
-    const items = tests.filter((t) => selectedTests.includes(t.test_id)).map((t) => ({ test_id: t.test_id, price: Number(t.price) || 0 }));
-    setPrescribeSaving(true);
-    setPrescribeMsg(null);
-    try {
-      await api.post("/labs/orders", {
-        appointment_id: prescribeTo.appointment_id,
-        patient_id: prescribeTo.patient_id,
-        doctor_id: prescribeTo.doctor_id,
-        items,
-      });
-      setPrescribeMsg("Lab tests assigned. Patient can collect in the Lab section.");
-      setTimeout(() => { setPrescribeTo(null); openProfile(prescribeTo.doctor_id); }, 1200);
-    } catch (e: any) {
-      setPrescribeMsg(e.message);
-    } finally {
-      setPrescribeSaving(false);
     }
   };
 
@@ -104,6 +65,66 @@ export default function Doctors({ pageProps, user, onLogout, onUserUpdate }: Pag
       alert(e.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const startEdit = () => {
+    if (!profile) return;
+    setEditForm({
+      name: profile.name || "",
+      specialization: profile.specialization || "",
+      degree: profile.degree || "",
+      bmdc_no: profile.bmdc_no || "",
+      phone: profile.phone || "",
+      email: profile.email || "",
+      consultation_fee: String(profile.consultation_fee || 0),
+      status: profile.status || "active",
+    });
+    setEditMode(true);
+  };
+
+  const saveEdit = async () => {
+    try {
+      await api.put(`/doctors/${profile.doctor_id}`, {
+        name: editForm.name,
+        specialization: editForm.specialization,
+        degree: editForm.degree,
+        bmdc_no: editForm.bmdc_no,
+        phone: editForm.phone,
+        email: editForm.email,
+        consultation_fee: Number(editForm.consultation_fee || 0),
+        status: editForm.status,
+      });
+      setEditMode(false);
+      setEditForm(null);
+      await openProfile(profile.doctor_id);
+      loadData();
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
+
+  const addSchedule = async () => {
+    if (!profile || !scheduleStart || !scheduleEnd) return;
+    try {
+      await api.post(`/doctors/${profile.doctor_id}/schedule`, {
+        day_of_week: scheduleDay,
+        start_time: scheduleStart,
+        end_time: scheduleEnd,
+      });
+      setAddingSchedule(false);
+      await openProfile(profile.doctor_id);
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
+
+  const removeSchedule = async (scheduleId: number) => {
+    try {
+      await api.del(`/doctors/${profile.doctor_id}/schedule/${scheduleId}`);
+      await openProfile(profile.doctor_id);
+    } catch (e: any) {
+      alert(e.message);
     }
   };
 
@@ -233,110 +254,175 @@ export default function Doctors({ pageProps, user, onLogout, onUserUpdate }: Pag
       </Modal>
 
       {/* Doctor profile */}
-      <Modal open={!!profile} onClose={() => setProfile(null)} title="Doctor Profile" width="max-w-3xl">
-        {profile && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700 text-lg font-bold">
-                {(profile.name || "").replace("Dr. ", "").split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
+      <Modal open={!!profile} onClose={() => setProfile(null)} title={editMode ? "Edit Doctor" : "Doctor Profile"} width="max-w-3xl">
+        {profile &&
+          (editMode ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                <Field label="Full Name" required>
+                  <Input value={editForm?.name || ""} onChange={(v) => setEditForm({ ...editForm, name: v })} />
+                </Field>
+                <Field label="Specialization">
+                  <Input value={editForm?.specialization || ""} onChange={(v) => setEditForm({ ...editForm, specialization: v })} />
+                </Field>
+                <Field label="Degree">
+                  <Input value={editForm?.degree || ""} onChange={(v) => setEditForm({ ...editForm, degree: v })} />
+                </Field>
+                <Field label="BMDC No.">
+                  <Input value={editForm?.bmdc_no || ""} onChange={(v) => setEditForm({ ...editForm, bmdc_no: v })} />
+                </Field>
+                <Field label="Phone">
+                  <Input value={editForm?.phone || ""} onChange={(v) => setEditForm({ ...editForm, phone: v })} />
+                </Field>
+                <Field label="Email">
+                  <Input value={editForm?.email || ""} onChange={(v) => setEditForm({ ...editForm, email: v })} />
+                </Field>
+                <Field label="Consultation Fee (BDT)">
+                  <Input type="number" value={editForm?.consultation_fee || "0"} onChange={(v) => setEditForm({ ...editForm, consultation_fee: v })} />
+                </Field>
+                <Field label="Status">
+                  <select
+                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-400/40 bg-white"
+                    value={editForm?.status || "active"}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </Field>
               </div>
-              <div className="flex-1">
-                <div className="text-sm font-bold text-slate-900">{profile.name}</div>
-                <div className="text-xs text-slate-500">{profile.specialization}</div>
-                <div className="text-[11px] text-slate-400">{profile.degree} · BMDC {profile.bmdc_no || "—"}</div>
-              </div>
-              <div className="text-right text-[11px]">
-                <div className="text-slate-400">Consultation Fee</div>
-                <div className="text-base font-bold text-slate-900">৳ {profile.consultation_fee}</div>
-              </div>
-            </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { label: "Total Appointments", value: profile.stats?.totalAppointments || 0 },
-                { label: "Patients Seen", value: profile.stats?.patientsSeen || 0 },
-                { label: "Today's Appointments", value: profile.stats?.todayAppointments || 0 },
-              ].map((s) => (
-                <div key={s.label} className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
-                  <div className="text-xl font-bold text-slate-900">{s.value}</div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">{s.label}</div>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-semibold text-slate-700">Weekly Schedule</h4>
+                  <Btn size="xs" variant="secondary" onClick={() => setAddingSchedule(!addingSchedule)}>
+                    {addingSchedule ? "Close" : "+ Add Slot"}
+                  </Btn>
                 </div>
-              ))}
-            </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-xs font-semibold text-slate-700">Patients Under This Doctor</h4>
-              </div>
-              <div className="rounded-lg border border-slate-200 overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-slate-50 text-left text-[11px] text-slate-500">
-                      {["Patient", "Date", "Fee", "Status", ""].map((h) => <th key={h} className="px-3 py-2 font-semibold">{h}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(profile.patients || []).map((pt: any) => (
-                      <tr key={pt.appointment_id} className="border-t border-slate-100">
-                        <td className="px-3 py-2">
-                          <div className="font-medium text-slate-800">{pt.patient_name}</div>
-                          <div className="text-[10px] font-mono text-slate-400">{pt.patient_unique_id}</div>
-                        </td>
-                        <td className="px-3 py-2 text-slate-600">{pt.appointment_date}</td>
-                        <td className="px-3 py-2">
-                          <div className={pt.due_amount > 0 ? "text-red-500" : "text-emerald-600"}>
-                            ৳ {pt.paid_amount || 0}/{pt.fee || 0}
-                            {pt.due_amount > 0 && <div className="text-[10px]">due ৳ {pt.due_amount}</div>}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2"><Badge label={pt.status} color={STATUS_COLOR[pt.status] || "gray"} /></td>
-                        <td className="px-3 py-2">
-                          <Btn size="xs" variant="primary" onClick={() => openPrescribe(pt)}>Assign Lab Tests</Btn>
-                        </td>
-                      </tr>
-                    ))}
-                    {(profile.patients || []).length === 0 && (
-                      <tr><td className="px-3 py-6 text-center text-slate-400" colSpan={5}>No patients assigned yet</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      {/* Assign lab tests (prescription) */}
-      <Modal open={!!prescribeTo} onClose={() => setPrescribeTo(null)} title="Assign Lab Tests" width="max-w-lg">
-        {prescribeTo && (
-          <div className="space-y-4">
-            <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs">
-              <div className="text-slate-500">Patient: <span className="font-medium text-slate-800">{prescribeTo.patient_name}</span></div>
-              <div className="text-slate-500 mt-0.5">ID: <span className="font-mono text-slate-700">{prescribeTo.patient_unique_id}</span></div>
-            </div>
-            <Field label="Select Tests to Prescribe" required>
-              <div className="border border-slate-200 rounded-lg max-h-56 overflow-auto divide-y divide-slate-50">
-                {tests.map((t) => (
-                  <label key={t.test_id} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50">
-                    <input type="checkbox" checked={selectedTests.includes(t.test_id)} onChange={() => toggleTest(t.test_id)} />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs text-slate-800 truncate">{t.test_name}</div>
-                      <div className="text-[10px] text-slate-400">{t.category_name || "General"} · ৳ {t.price}</div>
+                {addingSchedule && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3 p-3 rounded-lg border border-sky-200 bg-sky-50">
+                    <Field label="Day">
+                      <select
+                        className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-md bg-white"
+                        value={scheduleDay}
+                        onChange={(e) => setScheduleDay(e.target.value)}
+                      >
+                        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Start">
+                      <Input type="time" value={scheduleStart} onChange={setScheduleStart} />
+                    </Field>
+                    <Field label="End">
+                      <Input type="time" value={scheduleEnd} onChange={setScheduleEnd} />
+                    </Field>
+                    <div className="flex items-end">
+                      <Btn size="xs" onClick={addSchedule}>Add Slot</Btn>
                     </div>
-                  </label>
-                ))}
-                {tests.length === 0 && <div className="py-4 text-center text-xs text-slate-400">Loading tests...</div>}
+                  </div>
+                )}
+
+                {(profile.schedule || []).length === 0 ? (
+                  <div className="text-[11px] text-slate-400 py-2">No schedule slots set yet.</div>
+                ) : (
+                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-lg">
+                    {(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const).flatMap((day) =>
+                      (profile.schedule || [])
+                        .filter((s: any) => s.day_of_week === day)
+                        .map((s: any) => (
+                          <div key={s.schedule_id} className="flex items-center justify-between px-4 py-2">
+                            <div className="text-xs font-medium text-slate-700">{day}</div>
+                            <div className="flex items-center gap-3">
+                              <span className="font-mono text-xs text-emerald-700">{s.start_time} - {s.end_time}</span>
+                              <button onClick={() => removeSchedule(s.schedule_id)} className="text-red-400 hover:text-red-600 text-xs">Remove</button>
+                            </div>
+                          </div>
+                        ))
+                    )}
+                  </div>
+                )}
               </div>
-            </Field>
-            {prescribeMsg && (
-              <div className={`text-xs px-3 py-2 rounded-lg ${prescribeMsg.includes("assigned") ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>{prescribeMsg}</div>
-            )}
-            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-              <Btn variant="secondary" onClick={() => setPrescribeTo(null)}>Cancel</Btn>
-              <Btn onClick={submitPrescribe} disabled={prescribeSaving}>{prescribeSaving ? "Assigning..." : "Assign & Send to Lab"}</Btn>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+                <Btn variant="secondary" onClick={() => { setEditMode(false); setEditForm(null); }}>Cancel</Btn>
+                <Btn onClick={saveEdit}>Save Changes</Btn>
+              </div>
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="w-20 h-20 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-700 text-2xl font-bold flex-shrink-0">
+                  {(profile.name || "").replace("Dr. ", "").split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-lg font-bold text-slate-900">{profile.name}</div>
+                  <div className="text-sm text-slate-500">{profile.specialization}</div>
+                  <div className="text-xs text-slate-400 mt-0.5">{profile.degree} · BMDC {profile.bmdc_no || "—"}</div>
+                  <div className="mt-2"><Badge label={profile.status} color={profile.status === "active" ? "green" : "gray"} /></div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[11px] text-slate-400">Consultation Fee</div>
+                  <div className="text-xl font-bold text-slate-900">৳ {profile.consultation_fee}</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                {[
+                  { label: "Total Appointments", value: profile.stats?.totalAppointments || 0 },
+                  { label: "Patients Seen", value: profile.stats?.patientsSeen || 0 },
+                  { label: "Today's Appointments", value: profile.stats?.todayAppointments || 0 },
+                ].map((s) => (
+                  <div key={s.label} className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
+                    <div className="text-xl font-bold text-slate-900">{s.value}</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-lg border border-slate-200 divide-y divide-slate-100">
+                {[
+                  ["Phone", profile.phone || "—"],
+                  ["Email", profile.email || "—"],
+                  ["BMDC No.", profile.bmdc_no || "—"],
+                  ["Fee (BDT)", `৳ ${profile.consultation_fee}`],
+                ].map(([k, v]) => (
+                  <div key={k} className="flex items-center justify-between px-4 py-2.5">
+                    <span className="text-xs text-slate-500">{k}</span>
+                    <span className="text-xs font-medium text-slate-800">{v}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <h4 className="text-xs font-semibold text-slate-700 mb-2">Weekly Schedule</h4>
+                <div className="grid grid-cols-7 gap-1.5">
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => {
+                    const entry = (profile.schedule || []).find((s: any) => s.day_of_week === day);
+                    return (
+                      <div key={day} className={`rounded-lg border p-2 text-center ${entry ? "border-emerald-200 bg-emerald-50" : "border-slate-100 bg-slate-50"}`}>
+                        <div className="text-[10px] font-semibold text-slate-500">{day}</div>
+                        <div className="text-[10px] mt-1">
+                          {entry ? (
+                            <div>
+                              <div className="font-medium text-emerald-700">{entry.start_time} - {entry.end_time}</div>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">Off</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+                <Btn variant="secondary" onClick={() => setProfile(null)}>Close</Btn>
+                <Btn onClick={startEdit}>Edit Profile</Btn>
+              </div>
+            </div>
+          ))}
       </Modal>
     </Layout>
   );

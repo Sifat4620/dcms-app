@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Layout, { Card, Badge, Btn, SearchBar, Table, TR, TD, Modal, Field, Input } from "../components/Layout";
+import InvoiceModal from "../components/InvoiceModal";
 import { api } from "../data/api";
 
 interface PageProps {
@@ -18,30 +19,24 @@ const STATUS_COLOR: Record<string, "green" | "blue" | "yellow" | "red" | "gray" 
   Pending: "yellow",
 };
 
-const WEEK_DAYS = [
-  { short: "Sun", date: 31 },
-  { short: "Mon", date: 1 },
-  { short: "Tue", date: 2 },
-  { short: "Wed", date: 3 },
-  { short: "Thu", date: 4 },
-  { short: "Fri", date: 5 },
-  { short: "Sat", date: 6 },
-];
-
 export default function Appointments({ pageProps, user, onLogout, onUserUpdate }: PageProps) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
-  const [selectedDay, setSelectedDay] = useState(1);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [patients, setPatients] = useState<any[]>([]);
   const [doctors, setDoctors] = useState<any[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ patient_id: "", doctor_id: "", appointment_date: "", appointment_time: "" });
-  const [payTarget, setPayTarget] = useState<any | null>(null);
-  const [payAmount, setPayAmount] = useState("");
-  const [payMethod, setPayMethod] = useState("Cash");
-  const [payError, setPayError] = useState<string | null>(null);
-  const [savingPay, setSavingPay] = useState(false);
+  const [invoiceData, setInvoiceData] = useState<any | null>(null);
+
+  const openInvoice = async (id: number) => {
+    try {
+      const data = await api.get<any>(`/appointments/${id}/invoice`);
+      setInvoiceData(data);
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
 
   const loadData = () => {
     api.get<any>("/appointments?limit=100").then((res) => setAppointments(res.data)).catch(() => {});
@@ -69,7 +64,10 @@ export default function Appointments({ pageProps, user, onLogout, onUserUpdate }
   }, {} as Record<string, number>);
 
   const updateStatus = (id: number, status: string) => {
-    api.put(`/appointments/${id}`, { status }).then(() => loadData());
+    api.put(`/appointments/${id}`, { status }).then((res: any) => {
+      if (res?.invoice) setInvoiceData(res.invoice);
+      loadData();
+    });
   };
 
   const handleAdd = async () => {
@@ -86,30 +84,6 @@ export default function Appointments({ pageProps, user, onLogout, onUserUpdate }
     }
   };
 
-  const openPay = (a: any) => {
-    setPayTarget(a);
-    setPayAmount(String(a.due_amount || ""));
-    setPayMethod("Cash");
-    setPayError(null);
-  };
-
-  const submitPay = async () => {
-    const amt = Number(payAmount);
-    if (!amt || amt <= 0) { setPayError("Enter a valid amount"); return; }
-    if (amt > (payTarget.due_amount || 0)) { setPayError("Amount exceeds due"); return; }
-    setSavingPay(true);
-    setPayError(null);
-    try {
-      await api.post(`/appointments/${payTarget.appointment_id}/payment`, { amount: amt, payment_method: payMethod });
-      setPayTarget(null);
-      loadData();
-    } catch (e: any) {
-      setPayError(e.message);
-    } finally {
-      setSavingPay(false);
-    }
-  };
-
   const STATUS_DOT: Record<string, string> = {
     Confirmed: "#3B82F6",
     "Checked-in": "#10B981",
@@ -122,7 +96,7 @@ export default function Appointments({ pageProps, user, onLogout, onUserUpdate }
   return (
     <Layout
       title={pageProps.title}
-      subtitle="Doctor appointment scheduling and tracking"
+      subtitle="Doctor appointment scheduling and status management"
       breadcrumb={pageProps.breadcrumb}
       user={user}
       onLogout={onLogout}
@@ -171,9 +145,7 @@ export default function Appointments({ pageProps, user, onLogout, onUserUpdate }
               <TR key={a.appointment_id}>
                 <TD mono>APT-{a.appointment_id}</TD>
                 <TD>
-                  <div>
-                    <div className="font-medium text-slate-800">{a.patient_name}</div>
-                  </div>
+                  <div className="font-medium text-slate-800">{a.patient_name}</div>
                 </TD>
                 <TD>{a.doctor_name}</TD>
                 <TD mono>{a.appointment_date}</TD>
@@ -200,15 +172,15 @@ export default function Appointments({ pageProps, user, onLogout, onUserUpdate }
                   </div>
                 </TD>
                 <TD>
-                  <div className="flex gap-1">
-                    {Number(a.due_amount) > 0 && (
-                      <Btn size="xs" variant="primary" onClick={() => openPay(a)}>Collect Fee</Btn>
-                    )}
+                  <div className="flex gap-1 flex-wrap">
                     {a.status === "Pending" && <Btn size="xs" variant="secondary" onClick={() => updateStatus(a.appointment_id, "Confirmed")}>Confirm</Btn>}
                     {a.status === "Confirmed" && <Btn size="xs" variant="secondary" onClick={() => updateStatus(a.appointment_id, "Checked-in")}>Check-in</Btn>}
                     {a.status === "Checked-in" && <Btn size="xs" variant="secondary" onClick={() => updateStatus(a.appointment_id, "Completed")}>Complete</Btn>}
                     {["Pending", "Confirmed"].includes(a.status) && (
                       <Btn size="xs" variant="danger" onClick={() => updateStatus(a.appointment_id, "Cancelled")}>Cancel</Btn>
+                    )}
+                    {Number(a.fee) > 0 && (
+                      <Btn size="xs" variant="secondary" onClick={() => openInvoice(a.appointment_id)}>Bill</Btn>
                     )}
                   </div>
                 </TD>
@@ -256,35 +228,7 @@ export default function Appointments({ pageProps, user, onLogout, onUserUpdate }
         </div>
       </Modal>
 
-      {/* Collect consultation fee */}
-      <Modal open={!!payTarget} onClose={() => setPayTarget(null)} title="Collect Consultation Fee">
-        {payTarget && (
-          <div className="space-y-4">
-            <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs">
-              <div className="flex justify-between"><span className="text-slate-500">Patient</span><span className="font-medium text-slate-800">{payTarget.patient_name}</span></div>
-              <div className="flex justify-between mt-1"><span className="text-slate-500">Doctor</span><span className="font-medium text-slate-800">{payTarget.doctor_name}</span></div>
-              <div className="flex justify-between mt-1"><span className="text-slate-500">Fee</span><span className="font-semibold text-slate-800">৳ {payTarget.fee}</span></div>
-              <div className="flex justify-between mt-1"><span className="text-slate-500">Already Paid</span><span className="text-emerald-600">৳ {payTarget.paid_amount || 0}</span></div>
-              <div className="flex justify-between mt-1"><span className="text-slate-500">Due</span><span className="text-red-500 font-semibold">৳ {payTarget.due_amount}</span></div>
-            </div>
-            <div className="grid grid-cols-1 gap-3">
-              <Field label="Amount" required>
-                <Input type="number" value={payAmount} onChange={setPayAmount} />
-              </Field>
-              <Field label="Payment Method" required>
-                <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)} className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white">
-                  {["Cash", "Card", "Mobile Banking", "Bank Transfer", "Online Payment"].map((m) => <option key={m} value={m}>{m}</option>)}
-                </select>
-              </Field>
-            </div>
-            {payError && <div className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{payError}</div>}
-            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-              <Btn variant="secondary" onClick={() => setPayTarget(null)}>Cancel</Btn>
-              <Btn onClick={submitPay} disabled={savingPay}>{savingPay ? "Saving..." : "Confirm Payment"}</Btn>
-            </div>
-          </div>
-        )}
-      </Modal>
+      <InvoiceModal invoice={invoiceData} open={!!invoiceData} onClose={() => setInvoiceData(null)} />
     </Layout>
   );
 }

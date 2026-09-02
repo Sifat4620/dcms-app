@@ -102,6 +102,16 @@ router.post('/invoices/:id/payments', (req, res) => {
     db.prepare('UPDATE invoices SET paid_amount=?, due_amount=?, status=? WHERE invoice_id=?')
       .run(newPaid, Math.max(0, newDue), newStatus, req.params.id);
 
+    if (invoice.appointment_id) {
+      const apt = db.prepare('SELECT * FROM appointments WHERE appointment_id = ?').get(invoice.appointment_id);
+      if (apt) {
+        const aptPaid = apt.paid_amount + amount;
+        const aptDue = apt.fee - aptPaid;
+        db.prepare('UPDATE appointments SET paid_amount=?, due_amount=? WHERE appointment_id=?')
+          .run(aptPaid, Math.max(0, aptDue), invoice.appointment_id);
+      }
+    }
+
     const updated = db.prepare('SELECT * FROM invoices WHERE invoice_id = ?').get(req.params.id);
     const payments = db.prepare('SELECT * FROM payments WHERE invoice_id = ?').all(req.params.id);
     res.json({ ...updated, payments });

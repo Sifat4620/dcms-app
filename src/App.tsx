@@ -5,6 +5,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Patients from "./pages/Patients";
 import Doctors from "./pages/Doctors";
+import DoctorPatients from "./pages/DoctorPatients";
 import Appointments from "./pages/Appointments";
 import Tokens from "./pages/Tokens";
 import LabTests from "./pages/LabTests";
@@ -29,12 +30,13 @@ export interface AppUser {
   phone?: string;
 }
 
-type PageId = "dashboard" | "patients" | "doctors" | "appointments" | "tokens" | "labtests" | "barcode" | "reports" | "billing" | "payments" | "inventory" | "employees" | "corporate" | "notifications" | "analytics" | "settings";
+type PageId = "dashboard" | "patients" | "doctors" | "doctorpatients" | "appointments" | "tokens" | "labtests" | "barcode" | "reports" | "billing" | "payments" | "inventory" | "employees" | "corporate" | "notifications" | "analytics" | "settings";
 
 const PAGE_PROPS: Record<PageId, { title: string; breadcrumb: string[] }> = {
   dashboard:     { title: "Dashboard", breadcrumb: ["Home", "Dashboard"] },
   patients:      { title: "CRM & Patient Management", breadcrumb: ["Home", "Patient Care", "Patients"] },
   doctors:       { title: "Doctor Management", breadcrumb: ["Home", "Patient Care", "Doctors"] },
+  doctorpatients:{ title: "Doctor Workload", breadcrumb: ["Home", "Patient Care", "Doctor Workload"] },
   appointments:  { title: "Appointment Management", breadcrumb: ["Home", "Patient Care", "Appointments"] },
   tokens:        { title: "Token & Queue Management", breadcrumb: ["Home", "Patient Care", "Queue"] },
   labtests:      { title: "Laboratory Test Management", breadcrumb: ["Home", "Laboratory", "Tests"] },
@@ -61,6 +63,7 @@ const PAGES: Record<PageId, PageComponent> = {
   dashboard:     (p) => <Dashboard {...p} />,
   patients:      (p) => <Patients {...p} />,
   doctors:       (p) => <Doctors {...p} />,
+  doctorpatients:(p) => <DoctorPatients {...p} />,
   appointments:  (p) => <Appointments {...p} />,
   tokens:        (p) => <Tokens {...p} />,
   labtests:      (p) => <LabTests {...p} />,

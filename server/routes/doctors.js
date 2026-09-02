@@ -28,6 +28,26 @@ router.get('/', (req, res) => {
   }
 });
 
+router.get('/patient-stats', (req, res) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const defaultMonth = today.slice(0, 7);
+    const date = String(req.query.date || today).slice(0, 10);
+    const month = String(req.query.month || defaultMonth).slice(0, 7);
+    const doctors = db.prepare('SELECT * FROM doctors ORDER BY name').all();
+    const rows = doctors.map((d) => {
+      const todayCount = db.prepare("SELECT COUNT(*) c FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND status IN ('Checked-in','Completed')").get(d.doctor_id, date).c;
+      const monthCount = db.prepare("SELECT COUNT(*) c FROM appointments WHERE doctor_id = ? AND substr(appointment_date,1,7) = ? AND status IN ('Checked-in','Completed')").get(d.doctor_id, month).c;
+      const totalCount = db.prepare("SELECT COUNT(*) c FROM appointments WHERE doctor_id = ? AND status IN ('Checked-in','Completed')").get(d.doctor_id).c;
+      return {
+        doctor_id: d.doctor_id, name: d.name, specialization: d.specialization, consultation_fee: d.consultation_fee,
+        today: todayCount, month: monthCount, total: totalCount,
+      };
+    });
+    res.json({ date, month, today, defaultMonth, doctors: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/:id', (req, res) => {
   try {
     const doctor = db.prepare('SELECT * FROM doctors WHERE doctor_id = ?').get(req.params.id);

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import Layout, { Card, Badge, Btn, SearchBar, Table, TR, TD, Modal, Field, Input } from "../components/Layout";
+import Layout, { Card, Badge, Btn, SearchBar, Modal, Field, Input } from "../components/Layout";
+import InvoiceModal from "../components/InvoiceModal";
 import { api } from "../data/api";
 
 interface PageProps {
@@ -24,6 +25,7 @@ export default function Payments({ pageProps, user, onLogout, onUserUpdate }: Pa
   const [payTarget, setPayTarget] = useState<any | null>(null);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("Cash");
+  const [invoiceData, setInvoiceData] = useState<any | null>(null);
 
   const load = () => {
     api.get<any>("/billing/due").then(setDueList).catch(() => {});
@@ -33,6 +35,15 @@ export default function Payments({ pageProps, user, onLogout, onUserUpdate }: Pa
   useEffect(() => {
     load();
   }, []);
+
+  const openInvoice = async (invoiceId: number) => {
+    try {
+      const data = await api.get<any>(`/billing/invoices/${invoiceId}`);
+      setInvoiceData(data);
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
 
   const filteredDue = dueList.filter(
     (i) => (i.patient_name || "").toLowerCase().includes(search.toLowerCase()) || (i.invoice_no || "").toLowerCase().includes(search.toLowerCase())
@@ -46,9 +57,11 @@ export default function Payments({ pageProps, user, onLogout, onUserUpdate }: Pa
         amount: Number(amount),
         payment_method: method,
       });
+      const invId = payTarget.invoice_id;
       setPayTarget(null);
       setAmount("");
       load();
+      openInvoice(invId);
     } catch (e: any) {
       alert(e.message);
     }
@@ -104,7 +117,10 @@ export default function Payments({ pageProps, user, onLogout, onUserUpdate }: Pa
                     <div className="text-sm font-semibold text-red-500">৳ {inv.due_amount.toLocaleString()}</div>
                     <div className="text-[10px] text-slate-400">of ৳ {inv.total_amount.toLocaleString()}</div>
                   </div>
-                  <Btn size="xs" variant="primary" onClick={() => setPayTarget(inv)}>Collect Due</Btn>
+                  <div className="flex items-center gap-1.5">
+                    <Btn size="xs" variant="secondary" onClick={() => openInvoice(inv.invoice_id)}>Invoice</Btn>
+                    <Btn size="xs" variant="primary" onClick={() => setPayTarget(inv)}>Collect Due</Btn>
+                  </div>
                 </div>
               ))}
               {filteredDue.length === 0 && (
@@ -129,6 +145,7 @@ export default function Payments({ pageProps, user, onLogout, onUserUpdate }: Pa
                   </div>
                   <Badge label={p.payment_method || "Cash"} color={METHOD_COLOR[p.payment_method] || "green"} />
                   <div className="text-sm font-semibold text-emerald-600">৳ {p.amount.toLocaleString()}</div>
+                  <Btn size="xs" variant="secondary" onClick={() => openInvoice(p.invoice_id)}>Invoice</Btn>
                 </div>
               ))}
               {payments.length === 0 && (
@@ -163,6 +180,8 @@ export default function Payments({ pageProps, user, onLogout, onUserUpdate }: Pa
           <Btn onClick={recordPayment}>Record Payment</Btn>
         </div>
       </Modal>
+
+      <InvoiceModal invoice={invoiceData} open={!!invoiceData} onClose={() => setInvoiceData(null)} />
     </Layout>
   );
 }
