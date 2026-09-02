@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import Layout, { Card, Badge, Btn, SearchBar, Table, TR, TD, Modal } from "../components/Layout";
+import Layout, { Card, Badge, Btn, SearchBar, Table, TR, TD } from "../components/Layout";
+import LabReportModal from "../components/LabReportModal";
 import { api } from "../data/api";
 
 interface PageProps {
@@ -46,17 +47,6 @@ export default function Reports({ pageProps, user, onLogout, onUserUpdate }: Pag
     }
   };
 
-  const nextAction = async (r: any) => {
-    const status = r.status === "Draft" ? "Verified" : r.status === "Verified" ? "Approved" : "Released";
-    try {
-      await api.put(`/labs/reports/${r.report_id}/approve`, { approved_by: user.user_id, status });
-      setDetail(null);
-      loadReports();
-    } catch (e: any) {
-      alert(e.message);
-    }
-  };
-
   return (
     <Layout
       title={pageProps.title}
@@ -99,10 +89,7 @@ export default function Reports({ pageProps, user, onLogout, onUserUpdate }: Pag
                 <TD><Badge label={r.status} color={STATUS_COLOR[r.status] || "gray"} /></TD>
                 <TD>
                   <div className="flex gap-1">
-                    <Btn size="xs" variant="secondary" onClick={() => viewDetail(r.report_id)}>View</Btn>
-                    {r.status === "Draft" && <Btn size="xs" variant="primary" onClick={() => nextAction(r)}>Verify</Btn>}
-                    {r.status === "Verified" && <Btn size="xs" variant="primary" onClick={() => nextAction(r)}>Approve</Btn>}
-                    {r.status === "Approved" && <Btn size="xs" variant="primary" onClick={() => nextAction(r)}>Release</Btn>}
+                    <Btn size="xs" variant="primary" onClick={() => viewDetail(r.report_id)}>View & Print</Btn>
                   </div>
                 </TD>
               </TR>
@@ -114,51 +101,7 @@ export default function Reports({ pageProps, user, onLogout, onUserUpdate }: Pag
         </Card>
       </div>
 
-      <Modal open={!!detail} onClose={() => setDetail(null)} title={`Report — ${detail?.barcode || ""}`} width="max-w-3xl">
-        {detail && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[11px]">
-              <div><span className="text-slate-400">Patient:</span> <span className="font-medium text-slate-800">{detail.patient_name}</span></div>
-              <div><span className="text-slate-400">ID:</span> <span className="font-mono">{detail.patient_unique_id}</span></div>
-              <div><span className="text-slate-400">Gender:</span> <span>{detail.gender || "—"}</span></div>
-              <div><span className="text-slate-400">Doctor:</span> <span>{detail.doctor_name || "—"}</span></div>
-              <div><span className="text-slate-400">Status:</span> <Badge label={detail.status} color={STATUS_COLOR[detail.status] || "gray"} /></div>
-              <div><span className="text-slate-400">Approved:</span> <span>{detail.approved_by || "—"}</span></div>
-            </div>
-            <table className="w-full text-[11px] border border-slate-200 rounded">
-              <thead className="bg-slate-50">
-                <tr>
-                  {["Test", "Sample", "Result", "Unit", "Reference Range", "Flag"].map((h) => (
-                    <th key={h} className="text-left px-2 py-1.5 font-semibold text-slate-600">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(detail.results || []).map((row: any) => (
-                  <tr key={row.sample_id} className="border-t border-slate-100">
-                    <td className="px-2 py-1.5 text-slate-700">{row.test_name}</td>
-                    <td className="px-2 py-1.5 text-slate-500">{row.sample_type}</td>
-                    <td className="px-2 py-1.5 font-mono font-semibold text-slate-800">{row.result_value ?? "—"}</td>
-                    <td className="px-2 py-1.5 font-mono text-slate-500">{row.unit || "—"}</td>
-                    <td className="px-2 py-1.5 text-slate-500">{row.reference_range || "—"}</td>
-                    <td className="px-2 py-1.5">
-                      {row.is_abnormal ? <Badge label="Abnormal" color="red" /> : <Badge label="Normal" color="green" />}
-                    </td>
-                  </tr>
-                ))}
-                {!detail.results?.length && (
-                  <tr><td className="px-2 py-4 text-center text-slate-400" colSpan={6}>No results entered yet</td></tr>
-                )}
-              </tbody>
-            </table>
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-              <Btn variant="secondary" onClick={() => setDetail(null)}>Close</Btn>
-              {detail.status === "Verified" && <Btn onClick={() => nextAction(detail)}>Approve Report</Btn>}
-              {detail.status === "Approved" && <Btn onClick={() => nextAction(detail)}>Release Report</Btn>}
-            </div>
-          </div>
-        )}
-      </Modal>
+      <LabReportModal report={detail} user={user} onClose={() => setDetail(null)} onAdvanced={loadReports} />
     </Layout>
   );
 }

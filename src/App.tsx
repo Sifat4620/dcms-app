@@ -10,6 +10,7 @@ import Appointments from "./pages/Appointments";
 import Tokens from "./pages/Tokens";
 import LabTests from "./pages/LabTests";
 import Barcode from "./pages/Barcode";
+import Laboratorian from "./pages/Laboratorian";
 import Reports from "./pages/Reports";
 import Billing from "./pages/Billing";
 import PaymentReport from "./pages/PaymentReport";
@@ -30,7 +31,7 @@ export interface AppUser {
   phone?: string;
 }
 
-type PageId = "dashboard" | "patients" | "doctors" | "doctorpatients" | "appointments" | "tokens" | "labtests" | "barcode" | "reports" | "billing" | "paymentreport" | "inventory" | "employees" | "corporate" | "notifications" | "analytics" | "settings";
+type PageId = "dashboard" | "patients" | "doctors" | "doctorpatients" | "appointments" | "tokens" | "labtests" | "laboratorian" | "barcode" | "reports" | "billing" | "paymentreport" | "inventory" | "employees" | "corporate" | "notifications" | "analytics" | "settings";
 
 const PAGE_PROPS: Record<PageId, { title: string; breadcrumb: string[] }> = {
   dashboard:     { title: "Dashboard", breadcrumb: ["Home", "Dashboard"] },
@@ -40,6 +41,7 @@ const PAGE_PROPS: Record<PageId, { title: string; breadcrumb: string[] }> = {
   appointments:  { title: "Appointment Management", breadcrumb: ["Home", "Patient Care", "Appointments"] },
   tokens:        { title: "Token & Queue Management", breadcrumb: ["Home", "Patient Care", "Queue"] },
   labtests:      { title: "Laboratory Test Management", breadcrumb: ["Home", "Laboratory", "Tests"] },
+  laboratorian:  { title: "Laboratorian", breadcrumb: ["Home", "Laboratory", "Laboratorian"] },
   barcode:       { title: "Barcode & Sample Management", breadcrumb: ["Home", "Laboratory", "Samples"] },
   reports:       { title: "Lab Report Management", breadcrumb: ["Home", "Laboratory", "Reports"] },
   billing:       { title: "Billing Management", breadcrumb: ["Home", "Finance", "Billing"] },
@@ -67,6 +69,7 @@ const PAGES: Record<PageId, PageComponent> = {
   appointments:  (p) => <Appointments {...p} />,
   tokens:        (p) => <Tokens {...p} />,
   labtests:      (p) => <LabTests {...p} />,
+  laboratorian:  (p) => <Laboratorian {...p} />,
   barcode:       (p) => <Barcode {...p} />,
   reports:       (p) => <Reports {...p} />,
   billing:       (p) => <Billing {...p} />,

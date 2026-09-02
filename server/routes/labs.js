@@ -83,7 +83,7 @@ router.post('/orders', (req, res) => {
 router.get('/samples', (req, res) => {
   try {
     const { status, order_item_id } = req.query;
-    let query = `SELECT s.*, toi.test_id, t.test_name, p.name as patient_name, p.patient_unique_id, u.name as collected_by_name
+    let query = `SELECT s.*, toi.test_id, t.test_name, t.unit, t.reference_range, p.name as patient_name, p.patient_unique_id, u.name as collected_by_name
       FROM samples s
       JOIN test_order_items toi ON s.order_item_id = toi.order_item_id
       JOIN tests t ON toi.test_id = t.test_id
@@ -92,7 +92,7 @@ router.get('/samples', (req, res) => {
       JOIN patients p ON pv.patient_id = p.patient_id
       LEFT JOIN users u ON s.collected_by = u.user_id WHERE 1=1`;
     const params = [];
-    if (status) { query += ' AND s.collection_status = ?'; params.push(status); }
+    if (status) { query += ' AND s.status = ?'; params.push(status); }
     if (order_item_id) { query += ' AND s.order_item_id = ?'; params.push(order_item_id); }
 
     query += ' ORDER BY s.created_at DESC';
@@ -254,10 +254,19 @@ router.get('/samples/barcode/:barcode', (req, res) => {
 router.post('/results', (req, res) => {
   try {
     const { sample_id, result_value, unit, reference_range, is_abnormal, remarks, entered_by } = req.body;
-    const result = db.prepare('INSERT INTO lab_results (sample_id, result_value, unit, reference_range, is_abnormal, remarks, entered_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(sample_id, result_value, unit, reference_range, is_abnormal ? 1 : 0, remarks, entered_by);
+    const existing = db.prepare('SELECT result_id FROM lab_results WHERE sample_id = ?').get(sample_id);
+    let resultId;
+    if (existing) {
+      db.prepare('UPDATE lab_results SET result_value=?, unit=?, reference_range=?, is_abnormal=?, remarks=?, entered_by=? WHERE sample_id=?')
+        .run(result_value, unit, reference_range, is_abnormal ? 1 : 0, remarks, entered_by, sample_id);
+      resultId = existing.result_id;
+    } else {
+      const result = db.prepare('INSERT INTO lab_results (sample_id, result_value, unit, reference_range, is_abnormal, remarks, entered_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(sample_id, result_value, unit, reference_range, is_abnormal ? 1 : 0, remarks, entered_by);
+      resultId = result.lastInsertRowid;
+    }
     db.prepare("UPDATE samples SET status = 'Completed' WHERE sample_id = ?").run(sample_id);
-    res.json({ result_id: result.lastInsertRowid, message: 'Result entered' });
+    res.json({ result_id: resultId, message: 'Result saved' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -314,7 +323,7 @@ router.put('/reports/:id/approve', (req, res) => {
 router.get('/reports/:id', (req, res) => {
   try {
     const report = db.prepare(`SELECT r.*, u.name as approved_by, p.name as patient_name, p.patient_unique_id, p.gender, p.date_of_birth, p.mobile as patient_mobile,
-      d.name as doctor_name, too.visit_id
+      d.name as doctor_name, too.visit_id, b.branch_name, b.address as branch_address, b.phone as branch_phone, b.email as branch_email, b.logo as branch_logo
       FROM reports r
       JOIN test_orders too ON r.order_id = too.order_id
       JOIN patient_visits pv ON too.visit_id = pv.visit_id
@@ -322,14 +331,18 @@ router.get('/reports/:id', (req, res) => {
       LEFT JOIN users u ON r.approved_by = u.user_id
       LEFT JOIN doctor_consultations dc ON pv.visit_id = dc.visit_id
       LEFT JOIN doctors d ON dc.doctor_id = d.doctor_id
+      LEFT JOIN branches b ON pv.branch_id = b.branch_id
       WHERE r.report_id = ?`).get(req.params.id);
     if (!report) return res.status(404).json({ error: 'Report not found' });
 
-    const samples = db.prepare(`SELECT s.*, t.test_name, t.unit, t.reference_range, lr.result_value, lr.is_abnormal, lr.remarks
+    const samples = db.prepare(`SELECT s.*, t.test_name, t.unit, t.reference_range, lr.result_value, lr.is_abnormal, lr.remarks, lr.entered_at,
+      cu.name as collected_by_name, eu.name as entered_by_name
       FROM samples s
       JOIN test_order_items toi ON s.order_item_id = toi.order_item_id
       JOIN tests t ON toi.test_id = t.test_id
       LEFT JOIN lab_results lr ON s.sample_id = lr.sample_id
+      LEFT JOIN users cu ON s.collected_by = cu.user_id
+      LEFT JOIN users eu ON lr.entered_by = eu.user_id
       WHERE toi.order_id = ?`).all(report.order_id);
 
     res.json({ ...report, results: samples });
