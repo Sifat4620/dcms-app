@@ -21,10 +21,7 @@ const PAGE_PERMISSIONS: Record<string, string[]> = {
   settings: ["settings.users", "settings.roles", "settings.branch", "settings.system"],
 };
 
-const SUPER_ADMIN = "Super Admin";
-
 export function hasPageAccess(pageId: string, roleName: string, permissions: string[] | undefined): boolean {
-  if (roleName === SUPER_ADMIN) return true;
   const required = PAGE_PERMISSIONS[pageId];
   if (!required || required.length === 0) return false;
   return required.some((p) => permissions?.includes(p));

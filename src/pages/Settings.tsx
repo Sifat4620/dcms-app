@@ -99,6 +99,7 @@ export default function Settings({ pageProps, user, onLogout, onUserUpdate }: Pa
         setBranchForm({ branch_name: b.branch_name, code: b.code, address: b.address || "", phone: b.phone || "", email: b.email || "" });
       }
     }).catch(() => {});
+    api.get<any>("/auth/me").then((me) => onUserUpdate(me)).catch(() => {});
   };
 
   useEffect(() => {

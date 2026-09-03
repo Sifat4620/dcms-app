@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { getStoredUser, setStoredUser, clearToken } from "./data/api";
+import { useEffect, useState } from "react";
+import { getStoredUser, setStoredUser, clearToken, api } from "./data/api";
 import Sidebar, { hasPageAccess } from "./components/Sidebar";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -86,6 +86,19 @@ const PAGES: Record<PageId, PageComponent> = {
 export default function App() {
   const [user, setUser] = useState<AppUser | null>(() => getStoredUser());
   const [activePage, setActivePage] = useState<PageId>("dashboard");
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get<any>("/auth/me")
+      .then((me) => {
+        if (cancelled) return;
+        const fresh = { ...(me as AppUser) };
+        setUser(fresh);
+        setStoredUser(fresh);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const handleLogin = (u: AppUser) => {
     setUser(u);
