@@ -48,6 +48,7 @@ export default function PaymentReport({ pageProps, user, onLogout, onUserUpdate 
   });
 
   const totalCollected = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  const totalDiscounted = payments.reduce((s, p) => s + (p.discount || 0), 0);
   const byMethod = payments.reduce((acc, p) => {
     const m = p.payment_method || "Cash";
     acc[m] = (acc[m] || 0) + (p.amount || 0);
@@ -96,6 +97,21 @@ export default function PaymentReport({ pageProps, user, onLogout, onUserUpdate 
           </div>
         </div>
 
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="bg-emerald-50 rounded-lg border border-emerald-200 p-4">
+            <div className="text-[11px] text-emerald-600">Total Discount Given</div>
+            <div className="text-2xl font-semibold text-emerald-600">৳ {totalDiscounted.toLocaleString()}</div>
+          </div>
+          <div className="bg-white rounded-lg border border-slate-200 p-4">
+            <div className="text-[11px] text-slate-500">Discounted Invoices</div>
+            <div className="text-2xl font-semibold text-slate-900">{payments.filter((p) => (p.discount || 0) > 0).length}</div>
+          </div>
+          <div className="bg-slate-50 rounded-lg border border-slate-200 p-4">
+            <div className="text-[11px] text-slate-500">Net Collected (after discount)</div>
+            <div className="text-2xl font-semibold text-slate-900">৳ {Math.max(0, totalCollected - totalDiscounted).toLocaleString()}</div>
+          </div>
+        </div>
+
         <Card>
           <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-slate-100">
             <div>
@@ -117,7 +133,7 @@ export default function PaymentReport({ pageProps, user, onLogout, onUserUpdate 
               <input type="date" className="px-3 py-2 text-xs border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-sky-400" value={to} onChange={(e) => setTo(e.target.value)} />
             </div>
           </div>
-          <Table headers={["Date", "Invoice No.", "Patient", "Doctor Fee", "Lab Fee", "Method", "Trx No.", "Received By", "Amount"]}>
+          <Table headers={["Date", "Invoice No.", "Patient", "Doctor Fee", "Lab Fee", "Discount", "Method", "Trx No.", "Received By", "Amount"]}>
             {filtered.map((p) => (
               <TR key={p.payment_id}>
                 <TD mono>{p.payment_date}</TD>
@@ -125,6 +141,9 @@ export default function PaymentReport({ pageProps, user, onLogout, onUserUpdate 
                 <TD><span className="font-medium text-slate-800">{p.patient_name || "—"}</span></TD>
                 <TD mono><span className="text-sky-600 font-medium">৳ {(p.doctor_fee || 0).toLocaleString()}</span></TD>
                 <TD mono><span className="text-violet-600 font-medium">৳ {(p.lab_fee || 0).toLocaleString()}</span></TD>
+                <TD mono>
+                  {(p.discount || 0) > 0 ? <span className="text-emerald-600 font-medium">-৳ {(p.discount || 0).toLocaleString()}</span> : <span className="text-slate-300">—</span>}
+                </TD>
                 <TD>
                   <span className="inline-flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: METHOD_COLOR[p.payment_method] || "#94A3B8" }} />

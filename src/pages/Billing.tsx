@@ -86,6 +86,7 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
   const totalRevenue = invoices.reduce((s, i) => s + (i.paid_amount || 0), 0);
   const totalDue = invoices.reduce((s, i) => s + (i.due_amount || 0), 0);
   const totalBilled = invoices.reduce((s, i) => s + (i.total_amount || 0), 0);
+  const totalDiscount = invoices.reduce((s, i) => s + (i.discount || 0), 0);
 
   const addItem = () => {
     setItems([...items, { item_name: "", item_type: "Test", unit_price: 0, quantity: 1, item_id: null }]);
@@ -99,7 +100,12 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
     try {
       await api.post("/billing/invoices", {
         visit_id: Number(form.visit_id),
-        items: items.map((it) => ({ ...it, unit_price: Number(it.unit_price), quantity: Number(it.quantity) })),
+        items: items.map((it) => ({
+          ...it,
+          unit_price: Number(it.unit_price),
+          quantity: Number(it.quantity),
+          discount: Number(it.discount || 0),
+        })),
         discount: Number(form.discount || 0),
       });
       setShowCreate(false);
@@ -160,7 +166,7 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
       }
     >
       <div className="space-y-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <div className="bg-white rounded-lg border border-slate-200 p-4">
             <div className="text-[11px] text-slate-500">Total Invoices</div>
             <div className="text-2xl font-semibold text-slate-900">{invoices.length}</div>
@@ -176,6 +182,10 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
           <div className="bg-red-50 rounded-lg border border-red-200 p-4">
             <div className="text-[11px] text-red-500">Outstanding</div>
             <div className="text-2xl font-semibold text-red-500">৳ {totalDue.toLocaleString()}</div>
+          </div>
+          <div className="bg-emerald-50 rounded-lg border border-emerald-200 p-4">
+            <div className="text-[11px] text-emerald-600">Total Discount</div>
+            <div className="text-2xl font-semibold text-emerald-600">৳ {totalDiscount.toLocaleString()}</div>
           </div>
         </div>
 
@@ -216,7 +226,7 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
             </div>
 
             <Card>
-              <Table headers={["Invoice No.", "Patient", "Date", "Doctor Fee", "Lab Fee", "Total", "Paid", "Due", "Status", "Actions"]}>
+              <Table headers={["Invoice No.", "Patient", "Date", "Doctor Fee", "Lab Fee", "Discount", "Total", "Paid", "Due", "Status", "Actions"]}>
                 {filtered.map((inv) => (
                   <TR key={inv.invoice_id}>
                     <TD mono>{inv.invoice_no}</TD>
@@ -227,6 +237,9 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
                     <TD mono>{inv.invoice_date}</TD>
                     <TD mono><span className="text-sky-600 font-medium">৳ {(inv.doctor_fee || 0).toLocaleString()}</span></TD>
                     <TD mono><span className="text-violet-600 font-medium">৳ {(inv.lab_fee || 0).toLocaleString()}</span></TD>
+                    <TD mono>
+                      {inv.discount > 0 ? <span className="text-emerald-600 font-medium">-৳ {inv.discount.toLocaleString()}</span> : <span className="text-slate-300">—</span>}
+                    </TD>
                     <TD mono><span className="font-semibold">৳ {inv.total_amount.toLocaleString()}</span></TD>
                     <TD mono><span className="text-emerald-600 font-medium">৳ {inv.paid_amount.toLocaleString()}</span></TD>
                     <TD mono>
@@ -345,12 +358,49 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
                   type="number" placeholder="Qty" value={it.quantity}
                   onChange={(e) => setItem(i, { quantity: e.target.value })}
                 />
+                <input
+                  className="w-20 px-2 py-2 text-xs border border-emerald-200 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-400 bg-emerald-50"
+                  type="number" min="0" placeholder="Disc" value={it.discount || ""}
+                  onChange={(e) => setItem(i, { discount: e.target.value })}
+                />
                 <button onClick={() => setItems(items.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-600 text-xs">Remove</button>
               </div>
             ))}
             {items.length === 0 && <div className="text-[11px] text-slate-400 py-2">No items added yet.</div>}
           </div>
+          <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
+            <div className="text-[11px] font-semibold text-slate-600 mb-2">Subtotal</div>
+            <div className="text-sm font-semibold text-slate-800">
+              ৳ {items.reduce((s, it) => s + (Number(it.unit_price) || 0) * (Number(it.quantity) || 1) - (Number(it.discount) || 0), 0).toLocaleString()}
+            </div>
+          </div>
         </div>
+        <Field label="Discount (BDT)" >
+          <input
+            className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400"
+            type="number"
+            min="0"
+            placeholder="0"
+            value={form.discount || ""}
+            onChange={(e) => setForm({ ...form, discount: e.target.value })}
+          />
+        </Field>
+        {items.length > 0 && (
+          <div className="p-3 bg-sky-50 rounded-lg border border-sky-200 space-y-1">
+            {(() => {
+              const subtotal = items.reduce((s, it) => s + (Number(it.unit_price) || 0) * (Number(it.quantity) || 1) - (Number(it.discount) || 0), 0);
+              const invoiceDiscount = Number(form.discount || 0);
+              const total = subtotal - invoiceDiscount;
+              return (
+                <>
+                  <div className="flex justify-between text-xs"><span className="text-slate-500">Subtotal</span><span className="font-medium text-slate-800">৳ {subtotal.toLocaleString()}</span></div>
+                  {invoiceDiscount > 0 && <div className="flex justify-between text-xs"><span className="text-emerald-600">Discount</span><span className="font-medium text-emerald-600">-৳ {invoiceDiscount.toLocaleString()}</span></div>}
+                  <div className="flex justify-between text-xs font-bold pt-1 border-t border-sky-200"><span className="text-slate-800">Total</span><span className="text-sky-700">৳ {total.toLocaleString()}</span></div>
+                </>
+              );
+            })()}
+          </div>
+        )}
         <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-slate-100">
           <Btn variant="secondary" onClick={() => setShowCreate(false)}>Cancel</Btn>
           <Btn onClick={createInvoice}>Generate Invoice</Btn>

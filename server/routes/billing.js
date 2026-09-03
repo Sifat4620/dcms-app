@@ -134,7 +134,7 @@ router.post('/invoices/:id/payments', (req, res) => {
 router.get('/payments/report', (req, res) => {
   try {
     const { method, from, to } = req.query;
-    let query = `SELECT p.*, i.invoice_no, p2.name as patient_name, u.name as received_by_name,
+    let query = `SELECT p.*, i.invoice_no, i.discount as discount, p2.name as patient_name, u.name as received_by_name,
       COALESCE(it.consultation_amt, 0) as doctor_fee, COALESCE(it.test_amt, 0) as lab_fee
       FROM payments p
       JOIN invoices i ON p.invoice_id = i.invoice_id
