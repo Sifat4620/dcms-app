@@ -106,7 +106,6 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
           quantity: Number(it.quantity),
           discount: Number(it.discount || 0),
         })),
-        discount: Number(form.discount || 0),
       });
       setShowCreate(false);
       setItems([]);
@@ -375,26 +374,23 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
             </div>
           </div>
         </div>
-        <Field label="Discount (BDT)" >
+        <Field label="Invoice No.">
           <input
             className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400"
-            type="number"
-            min="0"
-            placeholder="0"
-            value={form.discount || ""}
-            onChange={(e) => setForm({ ...form, discount: e.target.value })}
+            type="text"
+            placeholder="Enter invoice number"
+            value={form.invoice_no || ""}
+            onChange={(e) => setForm({ ...form, invoice_no: e.target.value })}
           />
         </Field>
         {items.length > 0 && (
           <div className="p-3 bg-sky-50 rounded-lg border border-sky-200 space-y-1">
             {(() => {
               const subtotal = items.reduce((s, it) => s + (Number(it.unit_price) || 0) * (Number(it.quantity) || 1) - (Number(it.discount) || 0), 0);
-              const invoiceDiscount = Number(form.discount || 0);
-              const total = subtotal - invoiceDiscount;
+              const total = subtotal;
               return (
                 <>
                   <div className="flex justify-between text-xs"><span className="text-slate-500">Subtotal</span><span className="font-medium text-slate-800">৳ {subtotal.toLocaleString()}</span></div>
-                  {invoiceDiscount > 0 && <div className="flex justify-between text-xs"><span className="text-emerald-600">Discount</span><span className="font-medium text-emerald-600">-৳ {invoiceDiscount.toLocaleString()}</span></div>}
                   <div className="flex justify-between text-xs font-bold pt-1 border-t border-sky-200"><span className="text-slate-800">Total</span><span className="text-sky-700">৳ {total.toLocaleString()}</span></div>
                 </>
               );
@@ -403,7 +399,7 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
         )}
         <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-slate-100">
           <Btn variant="secondary" onClick={() => setShowCreate(false)}>Cancel</Btn>
-          <Btn onClick={createInvoice}>Generate Invoice</Btn>
+          <Btn onClick={createInvoice}>Add Discount</Btn>
         </div>
       </Modal>
 
