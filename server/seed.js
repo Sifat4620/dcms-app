@@ -1,12 +1,13 @@
 import db from './config/database.js';
 import { initializeDatabase } from './config/schema.js';
 import bcrypt from 'bcryptjs';
+import defaultPermissionsFor from './permissions.js';
 
 initializeDatabase();
 
 const existingRoles = db.prepare('SELECT COUNT(*) as count FROM roles').get();
 if (existingRoles.count === 0) {
-  const insertRole = db.prepare('INSERT INTO roles (role_name, description) VALUES (?, ?)');
+  const insertRole = db.prepare('INSERT INTO roles (role_name, description, permissions) VALUES (?, ?, ?)');
   const roles = [
     ['Super Admin', 'Full system access'],
     ['Branch Admin', 'Branch level management'],
@@ -18,9 +19,19 @@ if (existingRoles.count === 0) {
     ['Sample Collector', 'Sample collection'],
     ['Patient', 'Patient portal access']
   ];
-  roles.forEach(r => insertRole.run(...r));
+  roles.forEach(r => insertRole.run(r[0], r[1], JSON.stringify(defaultPermissionsFor(r[0]))));
   console.log('Roles seeded');
 }
+
+const roleRows = db.prepare('SELECT role_id, role_name, permissions FROM roles').all();
+const updatePerm = db.prepare('UPDATE roles SET permissions = ? WHERE role_id = ?');
+roleRows.forEach((r) => {
+  const perms = JSON.parse(r.permissions || 'null') || null;
+  if (!Array.isArray(perms)) {
+    updatePerm.run(JSON.stringify(defaultPermissionsFor(r.role_name)), r.role_id);
+    console.log(`Role permissions seeded for ${r.role_name}`);
+  }
+});
 
 const existingBranch = db.prepare('SELECT COUNT(*) as count FROM branches').get();
 if (existingBranch.count === 0) {

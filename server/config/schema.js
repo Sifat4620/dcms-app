@@ -19,7 +19,8 @@ export function initializeDatabase() {
       role_id INTEGER PRIMARY KEY AUTOINCREMENT,
       role_name TEXT UNIQUE NOT NULL,
       description TEXT,
-      status TEXT DEFAULT 'active' CHECK(status IN ('active','inactive'))
+      status TEXT DEFAULT 'active' CHECK(status IN ('active','inactive')),
+      permissions TEXT
     );
 
     CREATE TABLE IF NOT EXISTS users (
@@ -31,6 +32,7 @@ export function initializeDatabase() {
       phone TEXT,
       password TEXT NOT NULL,
       status TEXT DEFAULT 'active' CHECK(status IN ('active','inactive')),
+      last_login DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -418,6 +420,8 @@ export function initializeDatabase() {
     }
   };
 
+  addCol('roles', 'permissions', 'TEXT');
+  addCol('users', 'last_login', 'DATETIME');
   addCol('appointments', 'fee', 'REAL DEFAULT 0');
   addCol('appointments', 'paid_amount', 'REAL DEFAULT 0');
   addCol('appointments', 'due_amount', 'REAL DEFAULT 0');
