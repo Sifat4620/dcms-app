@@ -32,7 +32,6 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
   const [invoices, setInvoices] = useState<any[]>([]);
   const [dueList, setDueList] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
-  const [items, setItems] = useState<any[]>([]);
   const [form, setForm] = useState<Record<string, any>>({});
   const [viewInvoice, setViewInvoice] = useState<any | null>(null);
   const [loadingView, setLoadingView] = useState(false);
@@ -88,27 +87,20 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
   const totalBilled = invoices.reduce((s, i) => s + (i.total_amount || 0), 0);
   const totalDiscount = invoices.reduce((s, i) => s + (i.discount || 0), 0);
 
-  const addItem = () => {
-    setItems([...items, { item_name: "", item_type: "Test", unit_price: 0, quantity: 1, item_id: null }]);
-  };
-
-  const setItem = (i: number, patch: Record<string, any>) => {
-    setItems(items.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
-  };
-
-  const createInvoice = async () => {
+  const applyDiscount = async () => {
+    if (!form.invoice_id) {
+      alert("Select an invoice");
+      return;
+    }
+    if (Number(form.discount || 0) < 0) {
+      alert("Enter a valid discount amount");
+      return;
+    }
     try {
-      await api.post("/billing/invoices", {
-        visit_id: Number(form.visit_id),
-        items: items.map((it) => ({
-          ...it,
-          unit_price: Number(it.unit_price),
-          quantity: Number(it.quantity),
-          discount: Number(it.discount || 0),
-        })),
+      await api.post(`/billing/invoices/${form.invoice_id}/discount`, {
+        discount: Number(form.discount || 0),
       });
       setShowCreate(false);
-      setItems([]);
       setForm({});
       load();
     } catch (e: any) {
@@ -160,7 +152,7 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
       actions={
         <>
           <SearchBar placeholder="Patient or invoice ID..." value={search} onChange={setSearch} />
-          <Btn onClick={() => setShowCreate(true)}>+ Create Invoice</Btn>
+          <Btn onClick={() => setShowCreate(true)}>+ Create Discount</Btn>
         </>
       }
     >
@@ -316,90 +308,58 @@ export default function Billing({ pageProps, user, onLogout, onUserUpdate }: Pag
         )}
       </div>
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create New Invoice" width="max-w-2xl">
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Discount" width="max-w-xl">
         <div className="space-y-4">
-          <Field label="Visit ID" required>
-            <input
-              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400"
-              placeholder="Enter visit ID"
-              value={form.visit_id || ""}
-              onChange={(e) => setForm({ ...form, visit_id: e.target.value })}
-            />
+          <Field label="Select Invoice" required>
+            <select
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400 bg-white"
+              value={form.invoice_id || ""}
+              onChange={(e) => setForm({ ...form, invoice_id: e.target.value })}
+            >
+              <option value="">Select an invoice to add discount</option>
+              {invoices.map((inv) => (
+                <option key={inv.invoice_id} value={inv.invoice_id}>
+                  {inv.invoice_no} — {inv.patient_name} (৳ {(inv.total_amount || 0).toLocaleString()})
+                </option>
+              ))}
+            </select>
           </Field>
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-[11px] font-semibold text-slate-600">Invoice Items</div>
-              <Btn size="xs" variant="secondary" onClick={addItem}>+ Add Item</Btn>
-            </div>
-            {items.map((it, i) => (
-              <div key={i} className="flex items-center gap-2 mb-2">
-                <input
-                  className="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400"
-                  placeholder="Item name" value={it.item_name}
-                  onChange={(e) => setItem(i, { item_name: e.target.value })}
-                />
-                <select
-                  className="px-2 py-2 text-xs border border-slate-200 rounded-md bg-white"
-                  value={it.item_type}
-                  onChange={(e) => setItem(i, { item_type: e.target.value })}
-                >
-                  <option value="Test">Test</option>
-                  <option value="Consultation">Consultation</option>
-                  <option value="Package">Package</option>
-                </select>
-                <input
-                  className="w-24 px-2 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400"
-                  type="number" placeholder="Price" value={it.unit_price}
-                  onChange={(e) => setItem(i, { unit_price: e.target.value })}
-                />
-                <input
-                  className="w-16 px-2 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400"
-                  type="number" placeholder="Qty" value={it.quantity}
-                  onChange={(e) => setItem(i, { quantity: e.target.value })}
-                />
-                <input
-                  className="w-20 px-2 py-2 text-xs border border-emerald-200 rounded-md focus:outline-none focus:ring-1 focus:ring-emerald-400 bg-emerald-50"
-                  type="number" min="0" placeholder="Disc" value={it.discount || ""}
-                  onChange={(e) => setItem(i, { discount: e.target.value })}
-                />
-                <button onClick={() => setItems(items.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-600 text-xs">Remove</button>
-              </div>
-            ))}
-            {items.length === 0 && <div className="text-[11px] text-slate-400 py-2">No items added yet.</div>}
-          </div>
-          <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
-            <div className="text-[11px] font-semibold text-slate-600 mb-2">Subtotal</div>
-            <div className="text-sm font-semibold text-slate-800">
-              ৳ {items.reduce((s, it) => s + (Number(it.unit_price) || 0) * (Number(it.quantity) || 1) - (Number(it.discount) || 0), 0).toLocaleString()}
-            </div>
-          </div>
+          {(() => {
+            const selected = invoices.find((inv) => String(inv.invoice_id) === String(form.invoice_id));
+            const original = selected ? Number(selected.total_amount) || 0 : 0;
+            const disc = Number(form.discount || 0);
+            const final = original - disc;
+            return (
+              <>
+                <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 space-y-1">
+                  <div className="text-[11px] font-semibold text-slate-600 mb-2">Discount Amount</div>
+                  {selected ? (
+                    <>
+                      <div className="flex justify-between text-xs"><span className="text-slate-500">Original Amount</span><span className="font-medium text-slate-800">৳ {original.toLocaleString()}</span></div>
+                      <div className="flex justify-between text-xs"><span className="text-emerald-600">Discount (BDT)</span><span className="font-medium text-emerald-600">-৳ {disc.toLocaleString()}</span></div>
+                      <div className="flex justify-between text-xs font-bold pt-1 border-t border-slate-200"><span className="text-slate-800">Final Amount</span><span className="text-sky-700">৳ {Math.max(0, final).toLocaleString()}</span></div>
+                    </>
+                  ) : (
+                    <div className="text-[11px] text-slate-400 py-1">Select an invoice to see the breakdown.</div>
+                  )}
+                </div>
+                <Field label="Discount (BDT)">
+                  <input
+                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400"
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={form.discount || ""}
+                    onChange={(e) => setForm({ ...form, discount: e.target.value })}
+                  />
+                </Field>
+              </>
+            );
+          })()}
         </div>
-        <Field label="Invoice No.">
-          <input
-            className="w-full px-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400"
-            type="text"
-            placeholder="Enter invoice number"
-            value={form.invoice_no || ""}
-            onChange={(e) => setForm({ ...form, invoice_no: e.target.value })}
-          />
-        </Field>
-        {items.length > 0 && (
-          <div className="p-3 bg-sky-50 rounded-lg border border-sky-200 space-y-1">
-            {(() => {
-              const subtotal = items.reduce((s, it) => s + (Number(it.unit_price) || 0) * (Number(it.quantity) || 1) - (Number(it.discount) || 0), 0);
-              const total = subtotal;
-              return (
-                <>
-                  <div className="flex justify-between text-xs"><span className="text-slate-500">Subtotal</span><span className="font-medium text-slate-800">৳ {subtotal.toLocaleString()}</span></div>
-                  <div className="flex justify-between text-xs font-bold pt-1 border-t border-sky-200"><span className="text-slate-800">Total</span><span className="text-sky-700">৳ {total.toLocaleString()}</span></div>
-                </>
-              );
-            })()}
-          </div>
-        )}
         <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-slate-100">
-          <Btn variant="secondary" onClick={() => setShowCreate(false)}>Cancel</Btn>
-          <Btn onClick={createInvoice}>Add Discount</Btn>
+          <Btn variant="secondary" onClick={() => { setShowCreate(false); setForm({}); }}>Cancel</Btn>
+          <Btn onClick={applyDiscount}>Apply Discount</Btn>
         </div>
       </Modal>
 

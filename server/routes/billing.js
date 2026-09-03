@@ -94,6 +94,26 @@ router.post('/invoices', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+router.post('/invoices/:id/discount', (req, res) => {
+  try {
+    const { discount } = req.body;
+    const invoice = db.prepare('SELECT * FROM invoices WHERE invoice_id = ?').get(req.params.id);
+    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+    if (discount == null || Number(discount) < 0) return res.status(400).json({ error: 'Enter a valid discount amount' });
+
+    const disc = Number(discount);
+    const newTotal = Math.max(0, invoice.subtotal - disc);
+    const newDue = Math.max(0, newTotal - invoice.paid_amount);
+    const newStatus = newDue <= 0 ? 'Paid' : invoice.paid_amount > 0 ? 'Partial' : 'Unpaid';
+
+    db.prepare('UPDATE invoices SET discount=?, total_amount=?, due_amount=?, status=? WHERE invoice_id=?')
+      .run(disc, newTotal, newDue, newStatus, req.params.id);
+
+    const updated = db.prepare('SELECT * FROM invoices WHERE invoice_id = ?').get(req.params.id);
+    res.json(updated);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.post('/invoices/:id/payments', (req, res) => {
   try {
     const { amount, payment_method, transaction_no, notes } = req.body;
