@@ -12,7 +12,7 @@ router.post('/login', (req, res) => {
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
     const user = db.prepare(`
-      SELECT u.*, r.role_name FROM users u
+      SELECT u.*, r.role_name, r.permissions FROM users u
       JOIN roles r ON u.role_id = r.role_id
       WHERE u.email = ? AND u.status = 'active'
     `).get(email);
@@ -24,6 +24,13 @@ router.post('/login', (req, res) => {
 
     db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE user_id = ?').run(user.user_id);
 
+    const permissions = (() => {
+      try {
+        const p = JSON.parse(user.permissions || '[]');
+        return Array.isArray(p) ? p : [];
+      } catch { return []; }
+    })();
+
     const token = jwt.sign(
       { user_id: user.user_id, email: user.email, role_name: user.role_name, branch_id: user.branch_id, name: user.name },
       JWT_SECRET,
@@ -32,7 +39,7 @@ router.post('/login', (req, res) => {
 
     res.json({
       token,
-      user: { user_id: user.user_id, name: user.name, email: user.email, role_name: user.role_name, branch_id: user.branch_id }
+      user: { user_id: user.user_id, name: user.name, email: user.email, role_name: user.role_name, branch_id: user.branch_id, permissions }
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -57,7 +64,12 @@ const currentUser = (req) => {
   const token = authHeader && authHeader.split(' ')[1];
   if (!token) return null;
   const decoded = jwt.verify(token, JWT_SECRET);
-  return db.prepare('SELECT u.user_id, u.name, u.email, u.phone, r.role_name, u.branch_id FROM users u JOIN roles r ON u.role_id = r.role_id WHERE u.user_id = ?').get(decoded.user_id);
+  const user = db.prepare('SELECT u.user_id, u.name, u.email, u.phone, r.role_name, u.branch_id, r.permissions FROM users u JOIN roles r ON u.role_id = r.role_id WHERE u.user_id = ?').get(decoded.user_id);
+  if (!user) return null;
+  let permissions = [];
+  try { const p = JSON.parse(user.permissions || '[]'); permissions = Array.isArray(p) ? p : []; } catch {}
+  delete user.permissions;
+  return { ...user, permissions };
 };
 
 router.put('/me', (req, res) => {

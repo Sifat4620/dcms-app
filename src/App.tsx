@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { getStoredUser, setStoredUser, clearToken } from "./data/api";
-import Sidebar from "./components/Sidebar";
+import Sidebar, { hasPageAccess } from "./components/Sidebar";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Patients from "./pages/Patients";
@@ -29,6 +29,7 @@ export interface AppUser {
   email: string;
   branch_id?: number;
   phone?: string;
+  permissions?: string[];
 }
 
 type PageId = "dashboard" | "patients" | "doctors" | "doctorpatients" | "appointments" | "tokens" | "labtests" | "laboratorian" | "barcode" | "reports" | "billing" | "paymentreport" | "inventory" | "employees" | "corporate" | "notifications" | "analytics" | "settings";
@@ -106,15 +107,15 @@ export default function App() {
     return <Login onLogin={handleLogin} />;
   }
 
-  const PageComponent = PAGES[activePage];
-  const pageProps = PAGE_PROPS[activePage];
   const role = user.role_name || user.role || "Super Admin";
+  const safePage = hasPageAccess(activePage, role, user.permissions) ? activePage : "dashboard";
+  const SafeComponent = PAGES[safePage];
 
   return (
     <div className="flex h-full overflow-hidden" style={{ background: "#F8FAFC" }}>
-      <Sidebar active={activePage} onNavigate={(id) => setActivePage(id as PageId)} userRole={role} />
+      <Sidebar active={safePage} onNavigate={(id) => setActivePage(id as PageId)} userRole={role} permissions={user.permissions} />
       <div className="flex-1 overflow-hidden min-w-0">
-        <PageComponent pageProps={pageProps} user={{ ...user, role }} onLogout={handleLogout} onUserUpdate={handleUserUpdate} />
+        <SafeComponent pageProps={PAGE_PROPS[safePage]} user={{ ...user, role }} onLogout={handleLogout} onUserUpdate={handleUserUpdate} />
       </div>
     </div>
   );

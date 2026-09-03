@@ -1,5 +1,35 @@
 import { useState } from "react";
 
+const PAGE_PERMISSIONS: Record<string, string[]> = {
+  dashboard: ["dashboard.view"],
+  patients: ["patients.view"],
+  doctors: ["doctors.view"],
+  doctorpatients: ["doctorworkload.view"],
+  appointments: ["appointments.view"],
+  tokens: ["tokens.view"],
+  labtests: ["labtests.view"],
+  laboratorian: ["laboratorian.view"],
+  barcode: ["samples.view"],
+  reports: ["reports.view"],
+  billing: ["billing.view"],
+  paymentreport: ["paymentreport.view"],
+  inventory: ["inventory.view"],
+  employees: ["employees.view"],
+  corporate: ["corporate.view"],
+  notifications: ["notifications.view"],
+  analytics: ["analytics.view"],
+  settings: ["settings.users", "settings.roles", "settings.branch", "settings.system"],
+};
+
+const SUPER_ADMIN = "Super Admin";
+
+export function hasPageAccess(pageId: string, roleName: string, permissions: string[] | undefined): boolean {
+  if (roleName === SUPER_ADMIN) return true;
+  const required = PAGE_PERMISSIONS[pageId];
+  if (!required || required.length === 0) return false;
+  return required.some((p) => permissions?.includes(p));
+}
+
 const NAV_ITEMS = [
   {
     group: "Overview",
@@ -55,10 +85,18 @@ interface SidebarProps {
   active: string;
   onNavigate: (id: string) => void;
   userRole?: string;
+  permissions?: string[];
 }
 
-export default function Sidebar({ active, onNavigate, userRole = "Super Admin" }: SidebarProps) {
+export default function Sidebar({ active, onNavigate, userRole = "Super Admin", permissions = [] }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+
+  const filteredNav = NAV_ITEMS
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => hasPageAccess(item.id, userRole, permissions)),
+    }))
+    .filter((group) => group.items.length > 0);
 
   const initials = userRole.split(" ").map((w) => w[0]).join("").slice(0, 2);
 
@@ -98,7 +136,7 @@ export default function Sidebar({ active, onNavigate, userRole = "Super Admin" }
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-2 scrollbar-hide">
-        {NAV_ITEMS.map((group) => (
+        {filteredNav.map((group) => (
           <div key={group.group} className="mb-0.5">
             {!collapsed && (
               <div className="px-3 pt-4 pb-1 text-[9px] font-bold uppercase tracking-[0.12em]" style={{ color: "#334155" }}>
